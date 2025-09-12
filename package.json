@@ -22,6 +22,8 @@
     }
   },
   "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
     "@aws-amplify/react-native": "^1.1.10",
     "@aws-amplify/storage": "^5.9.16",
     "@expo/vector-icons": "~14.0.4",
