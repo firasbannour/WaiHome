@@ -78,7 +78,20 @@
     "react-native-web": "~0.19.13",
     "react-native-wifi-reborn": "^4.13.6",
     "socket.io-client": "^4.8.1",
-    "@react-native-picker/picker": "2.9.0"
+    "@react-native-picker/picker": "2.9.0",
+    "@aws-sdk/client-dynamodb": "^3.864.0",
+    "@aws-sdk/lib-dynamodb": "^3.864.0",
+    "aws-sdk": "^2.1692.0",
+    "aws-iot-device-sdk-v2": "^1.23.0",
+    "axios": "^1.5.0",
+    "bcryptjs": "^2.4.3",
+    "dotenv": "^16.6.1",
+    "helmet": "^7.0.0",
+    "joi": "^17.9.2",
+    "jsonwebtoken": "^9.0.2",
+    "mqtt": "^5.14.0",
+    "multer": "^1.4.5-lts.1",
+    "uuid": "^9.0.0"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
