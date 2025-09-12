@@ -1,0 +1,47 @@
+{
+  "name": "waihome-backend",
+  "version": "1.0.0",
+  "description": "Backend API for WaiHome IoT application",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js",
+    "deploy": "serverless deploy",
+    "test": "node scripts/test-api.js",
+    "create-tables": "node scripts/create-tables.js",
+    "deploy-aws": "node scripts/deploy-aws.js"
+  },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.864.0",
+    "@aws-sdk/lib-dynamodb": "^3.864.0",
+    "aws-iot-device-sdk-v2": "^1.23.0",
+    "aws-sdk": "^2.1692.0",
+    "aws-sdk-mock": "^5.8.0",
+    "axios": "^1.5.0",
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.6.1",
+    "express": "^4.21.2",
+    "helmet": "^7.0.0",
+    "joi": "^17.9.2",
+    "jsonwebtoken": "^9.0.2",
+    "mqtt": "^5.14.0",
+    "multer": "^1.4.5-lts.1",
+    "uuid": "^9.0.0"
+  },
+  "devDependencies": {
+    "jest": "^29.6.2",
+    "nodemon": "^3.0.1",
+    "serverless": "^3.33.0",
+    "serverless-offline": "^12.0.4",
+    "supertest": "^6.3.3"
+  },
+  "keywords": [
+    "iot",
+    "shelly",
+    "aws",
+    "react-native"
+  ],
+  "author": "WaiHome Team",
+  "license": "MIT"
+}

@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "extra": {
+      "eas": {
+        "projectId": "63ec0634-ca31-44ab-9c1c-b97c1c1cc5a9"
+      }
+    },
+    "android": {
+      "package": "com.firasbannour.waihomebackend"
+    }
+  }
+}

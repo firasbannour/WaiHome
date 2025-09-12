@@ -1,0 +1,27 @@
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": [
+                "dynamodb:GetItem",
+                "dynamodb:PutItem",
+                "dynamodb:UpdateItem",
+                "dynamodb:DeleteItem",
+                "dynamodb:Query",
+                "dynamodb:Scan",
+                "dynamodb:BatchGetItem",
+                "dynamodb:BatchWriteItem",
+                "dynamodb:DescribeTable",
+                "dynamodb:ListTables"
+            ],
+            "Resource": [
+                "arn:aws:dynamodb:us-east-1:641152421046:table/WaiHomeShellyDevices",
+                "arn:aws:dynamodb:us-east-1:641152421046:table/waihome-sites",
+                "arn:aws:dynamodb:us-east-1:641152421046:table/waihome-users",
+                "arn:aws:dynamodb:us-east-1:641152421046:table/waihome-shelly-data",
+                "arn:aws:dynamodb:us-east-1:641152421046:table/waihome-admin-logs"
+            ]
+        }
+    ]
+}

@@ -17,7 +17,17 @@
         "backgroundColor": "#ffffff"
       },
       "package": "com.arijtilouche.waihomeuser",
-      "jsEngine": "hermes"
+      "jsEngine": "hermes",
+      "permissions": [
+        "android.permission.BLUETOOTH",
+        "android.permission.BLUETOOTH_ADMIN",
+        "android.permission.BLUETOOTH_CONNECT",
+        "android.permission.BLUETOOTH_SCAN",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_WIFI_STATE",
+        "android.permission.CHANGE_WIFI_STATE"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -47,7 +57,6 @@
       "eas": {
         "projectId": "3147cc2a-20f8-4d5a-81d1-95e05de658cc"
       }
-    },
-    "owner": "firasbannour"
+    }
   }
 }
