@@ -3045,13 +3045,13 @@ export default function MainPage() {
             </TouchableOpacity>
             
             {/* Bouton Profile */}
-            <TouchableOpacity style={styles.profileBtnModern} onPress={() => (navigation as any).navigate('profile')}>
-              {profileImage ? (
-                <Image source={{ uri: profileImage }} style={styles.profileImage} />
-              ) : (
-              <MaterialIcons name="more-vert" size={32} color="#0c7a7e" />
-              )}
-            </TouchableOpacity>
+          <TouchableOpacity style={styles.profileBtnModern} onPress={() => (navigation as any).navigate('profile')}>
+            {profileImage ? (
+              <Image source={{ uri: profileImage }} style={styles.profileImage} />
+            ) : (
+            <MaterialIcons name="more-vert" size={32} color="#0c7a7e" />
+            )}
+          </TouchableOpacity>
           </View>
         </SafeAreaView>
         </View>
