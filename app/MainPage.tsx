@@ -1,5 +1,4 @@
 // app/MainPage.tsx – BLE + Wi-Fi scan
-
 import React, { useState, useEffect, useRef } from "react";
 import {
   View,
@@ -1057,6 +1056,15 @@ export default function MainPage() {
     })();
   }, []);
 
+  // Ajouter un refresh automatique quand l'utilisateur revient sur la page
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      console.log('📱 Retour sur MainPage - rechargement des sites depuis AWS');
+      loadSitesFromAWS();
+    });
+    return unsubscribe;
+  }, [navigation]);
+
   /* Save helper */
   const persistSites = async (arr: SiteInfo[]) => {
     setSites(arr);
@@ -1075,6 +1083,7 @@ export default function MainPage() {
       }
 
       const result = await ShellyService.getUserShellyDevices(currentUserId);
+      console.log('🔍 Résultat complet de getUserShellyDevices:', result);
       
       if (result.success && result.data) {
         console.log('📥 Données reçues d\'AWS:', result.data);
@@ -1082,6 +1091,13 @@ export default function MainPage() {
         // Sécuriser les données - garantir que c'est un tableau
         const devices = Array.isArray(result.data) ? result.data : [];
         console.log('📋 Devices après sécurisation:', devices);
+        console.log('📊 Nombre de devices trouvés:', devices.length);
+        
+        if (devices.length === 0) {
+          console.log('ℹ️ Aucun device trouvé dans AWS, mais la requête a réussi');
+          // Garder les sites existants si aucun device n'est trouvé
+          return;
+        }
         
         // Convertir les données AWS en format SiteInfo
         const awsSites: SiteInfo[] = devices.map((device: any) => ({
@@ -1112,16 +1128,19 @@ export default function MainPage() {
         }
         const uniqueSites = Array.from(uniqueSitesMap.values());
         console.log('🧹 Sites après déduplication:', uniqueSites);
+        console.log('📊 Nombre final de sites uniques:', uniqueSites.length);
         
         // Mettre à jour l'état local et AsyncStorage
         await persistSites(uniqueSites);
         
-        console.log('✅ Sites synchronisés depuis AWS DynamoDB');
+        console.log('✅ Sites synchronisés depuis AWS DynamoDB - État mis à jour');
       } else {
         console.log('ℹ️ Aucune donnée trouvée dans AWS ou erreur:', result.error);
+        console.log('🔍 Détails de l\'erreur:', result);
       }
     } catch (error) {
       console.error('❌ Erreur lors du chargement depuis AWS:', error);
+      console.error('📋 Stack trace:', error.stack);
     }
   };
 
@@ -1800,7 +1819,7 @@ export default function MainPage() {
     try {
       console.log(`📤 Envoi commande à distance: ${component} ${action} sur ${siteId}`);
       
-      const response = await fetch(`http://192.168.100.193:8080/api/shelly/command/${siteId}`, {
+      const response = await fetch(`https://waihome-3.onrender.com/api/shelly/command/${siteId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ component, action, value })
@@ -1838,7 +1857,7 @@ export default function MainPage() {
   // NOUVEAU : Fonction pour tester la connexion MQTT
   const testMqttConnection = async () => {
     try {
-      const response = await fetch('http://192.168.100.193:8080/api/mqtt/status');
+      const response = await fetch('https://waihome-3.onrender.com/api/mqtt/status');
       const status = await response.json();
       
       console.log('📡 Statut MQTT:', status);
@@ -3014,13 +3033,25 @@ export default function MainPage() {
           <View style={{width: 40}} />
           <Image source={require('../assets/waihome_logo.png')} style={styles.logoModern} />
           <View style={{flexDirection: 'row', alignItems: 'center'}}>
-          <TouchableOpacity style={styles.profileBtnModern} onPress={() => (navigation as any).navigate('profile')}>
-            {profileImage ? (
-              <Image source={{ uri: profileImage }} style={styles.profileImage} />
-            ) : (
-            <MaterialIcons name="more-vert" size={32} color="#0c7a7e" />
-            )}
-          </TouchableOpacity>
+            {/* Bouton Refresh */}
+            <TouchableOpacity 
+              style={[styles.profileBtnModern, { marginRight: 8 }]} 
+              onPress={() => {
+                console.log('🔄 Refresh manuel des sites depuis AWS');
+                loadSitesFromAWS();
+              }}
+            >
+              <MaterialIcons name="refresh" size={24} color="#0c7a7e" />
+            </TouchableOpacity>
+            
+            {/* Bouton Profile */}
+            <TouchableOpacity style={styles.profileBtnModern} onPress={() => (navigation as any).navigate('profile')}>
+              {profileImage ? (
+                <Image source={{ uri: profileImage }} style={styles.profileImage} />
+              ) : (
+              <MaterialIcons name="more-vert" size={32} color="#0c7a7e" />
+              )}
+            </TouchableOpacity>
           </View>
         </SafeAreaView>
         </View>

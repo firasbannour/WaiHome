@@ -144,7 +144,7 @@ class ComponentStateService {
       };
       
       // Appel API pour sauvegarder/mettre à jour dans DynamoDB
-      const response = await fetch('http://192.168.100.193:8080/api/shelly/component-state', {
+      const response = await fetch('https://waihome-3.onrender.com/api/shelly/component-state', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -235,7 +235,7 @@ class ComponentStateService {
         return false;
       }
       
-      const response = await fetch(`http://192.168.100.193:8080/api/shelly/component-states/${siteId}?userId=${userId}`, {
+      const response = await fetch(`https://waihome-3.onrender.com/api/shelly/component-states/${siteId}?userId=${userId}`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json'

@@ -4,7 +4,7 @@ export class ShellyService {
   // URL de base pour l'API - Peut être changée pour les tests
   static get API_BASE_URL() {
     // Pour les tests avec d'autres utilisateurs, change cette URL
-    return 'http://192.168.100.193:8080/api';
+    return 'https://waihome-3.onrender.com/api';
     // Exemple pour un backend déployé : return 'https://ton-backend.onrender.com/api';
   }
 
@@ -12,13 +12,13 @@ export class ShellyService {
   static async testConnection() {
     try {
       console.log('🔍 Test de connectivité au backend...');
-      console.log('📍 URL testée: http://192.168.100.193:8080/health');
+      console.log('📍 URL testée: https://waihome-3.onrender.com/health');
       
       // Test avec timeout et gestion d'erreur améliorée
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 10000);
       
-      const response = await fetch('http://192.168.100.193:8080/health', {
+      const response = await fetch('https://waihome-3.onrender.com/health', {
         method: 'GET',
         signal: controller.signal,
         headers: {
@@ -166,7 +166,7 @@ export class ShellyService {
       console.log('🔄 Testing alternative connection...');
       
       // Essayer avec l'IP locale
-      const localResponse = await fetch('http://localhost:8080/health', {
+      const localResponse = await fetch('https://waihome-3.onrender.com/health', {
         method: 'GET',
         signal: AbortSignal.timeout(5000),
       });

@@ -1,7 +1,7 @@
 // services/remoteControlService.js
 // Service pour contrôler les Shelly à distance via AWS IoT
 
-const BACKEND_URL = 'http://192.168.100.193:8080';
+const BACKEND_URL = 'https://waihome-3.onrender.com';
 
 /**
  * Service pour contrôler les Shelly à distance via AWS IoT

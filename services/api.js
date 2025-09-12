@@ -1,5 +1,5 @@
 // Configuration API pour WaiHome
-const API_BASE_URL = 'http://192.168.100.193:8080/api';
+const API_BASE_URL = 'https://waihome-3.onrender.com/api';
 
 // Fonction utilitaire pour les requêtes API
 const apiRequest = async (endpoint, options = {}) => {
@@ -231,7 +231,7 @@ export const adminAPI = {
 // Health check
 export const healthAPI = {
   check: async () => {
-    return fetch('http://192.168.100.193:8080/health').then(res => res.json());
+    return fetch('https://waihome-3.onrender.com/health').then(res => res.json());
   }
 };
 
