@@ -940,35 +940,25 @@ function initializeScript() {
       print("⚠️ Script déjà initialisé, ignoré");
       return;
     }
-    
     isInitialized = true;
     print("🚀 Initialisation SIMPLIFIÉE du script...");
-    
-    // Nettoyer d'abord tous les timers
     clearAllTimers();
     
+    // FORCER L'AP TOUJOURS ACTIF même sans WiFi
+    forceAPAlwaysActive();
+    
   if (Shelly.getDeviceInfo().ip === "0.0.0.0") {
-    print("⚠️ Pas de connexion Wi-Fi - attente...");
-      isInitialized = false;
-    return;
+    print("⚠️ Pas de connexion Wi-Fi - Mode AP activé pour configuration");
+    print("📡 AP Shelly actif - Prêt pour configuration WiFi");
+    // Ne pas arrêter l'initialisation, continuer en mode AP
+  } else {
+    print("✅ WiFi connecté - IP:", Shelly.getDeviceInfo().ip);
   }
-  
-    // NOUVEAU : Forcer tous les outputs en OFF au démarrage
     forceAllOutputsOff();
-    
-    // Configuration restore_last uniquement
     ensureRestoreLastConfigured();
-    
-    // Configuration AWS IoT
     configureAWSIoT();
-    
-    // Démarrer la collecte de données
     startDataCollection();
-    
-    // Configuration des événements
     setupEventHandlers();
-    
-    // 5) Lire l'état RÉEL du hardware après 5 secondes
     Timer.set(5000, false, function() {
       print("🔍 Lecture de l'état RÉEL du hardware...");
       for (var component in components) {
@@ -1168,7 +1158,6 @@ function executeComponentCommand(component, action, value) {
       print("❌ Composant " + component + " non reconnu");
       return { success: false, error: "Composant non reconnu" };
     }
-    
     var relayId = components[component].relay;
     var turnAction = "off";
     if (action === "on" || action === "true" || action === true || action === 1) {
@@ -1176,20 +1165,13 @@ function executeComponentCommand(component, action, value) {
     } else if (action === "toggle") {
       turnAction = components[component].status ? "off" : "on";
     }
-    
     print("🔧 Commande " + component + " vers " + turnAction + " - Relay " + relayId);
-    
-    // Mise à jour optimiste
       components[component].status = (turnAction === "on");
-      
-    // Commande directe sans délai
     var result = Shelly.call("Switch.Set", { id: relayId, on: turnAction === "on" });
-    
     if (result) {
       print("✅ " + components[component].name + " " + turnAction);
     } else {
       print("❌ Échec " + component + " - Switch.Set retourné null");
-      // Récupération immédiate de l'état
       try {
         var status = Shelly.call("Switch.GetStatus", { id: relayId });
         if (status) {
@@ -1200,15 +1182,11 @@ function executeComponentCommand(component, action, value) {
         print("⚠️ Impossible de récupérer l'état");
       }
     }
-    
-    // Sauvegarde et envoi immédiats
     saveComponentStates();
       if (isConnected && !isInResetMode) {
         sendDataToAWS();
       }
-      
     return { success: true, data: { component: component, action: turnAction, relay: relayId, status: components[component].status } };
-    
   } catch (error) {
     print("❌ Erreur commande " + component + ":", error);
     return { success: false, error: error.message };
@@ -1217,7 +1195,6 @@ function executeComponentCommand(component, action, value) {
 function getComponentsStatus() {
   var status = {};
   print("📊 Lecture des statuts des composants...");
-  
   for (var component in components) {
     try {
       var relayInfo = Shelly.call("Switch.GetStatus", { id: components[component].relay });
@@ -1259,17 +1236,15 @@ function getComponentsStatus() {
         relay: components[component].relay,
         name: components[component].name
       };
-      }
     }
   }
-  
+  }
   print("📋 Résumé des composants:");
   for (var comp in status) {
     var state = status[comp].status ? "ON" : "OFF";
     var icon = status[comp].status ? "🟢" : "🔴";
     print("   " + icon + " " + comp + " (" + status[comp].name + "): " + state);
   }
-  
   return status;
 }
 function sendDataToAWS() {
@@ -1410,4 +1385,13 @@ print("🔧 Test AP toutes les 5 minutes");
 print("🚀 FONCTION FORCE ENVOI: sendDataToAWS() - Appelable manuellement");
 print("🔍 FONCTION DIAGNOSTIC: getComponentsStatus() - Pour debug");
 initializeScript();
+// DÉMARRER L'AP IMMÉDIATEMENT
+print("🚀 DÉMARRAGE IMMÉDIAT DE L'AP SHELLY...");
+try {
+  forceAPAlwaysActive();
+  print("✅ AP Shelly démarré immédiatement");
+} catch (e) {
+  print("❌ Erreur démarrage AP immédiat:", e);
+}
+
 print("✅ Script chargé et en attente d'initialisation...");

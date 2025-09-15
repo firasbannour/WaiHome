@@ -2186,39 +2186,100 @@ export default function MainPage() {
       console.log('🔧 Configuration du WiFi Shelly...');
       const shellyIP = '192.168.33.1'; // IP par défaut de l'AP Shelly
       
-      const wifiConfig = {
-        wifi: {
-          ssid: ssid,
-          pass: password,
-          ip: null,
-          netmask: null,
-          gw: null
-        }
-      };
+      // Essayer plusieurs méthodes de configuration
+      let configSuccess = false;
       
+      // Méthode 1: API RPC Shelly
       try {
-        const response = await fetch(`http://${shellyIP}/settings`, {
+        console.log('🔧 Tentative configuration via API RPC...');
+        const rpcConfig = {
+          method: 'Wifi.SetConfig',
+          params: {
+            config: {
+              ssid: ssid,
+              pass: password,
+              ip: null,
+              netmask: null,
+              gw: null
+            }
+          }
+        };
+        
+        const rpcResponse = await fetch(`http://${shellyIP}/rpc`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify(wifiConfig)
+          body: JSON.stringify(rpcConfig)
         });
         
-        if (response.ok) {
-          console.log('✅ Configuration WiFi envoyée au Shelly');
-          
-          // 5. Attendre que le Shelly se reconnecte au nouveau WiFi
-          console.log('⏳ Attente de la reconnexion Shelly...');
-          await new Promise(resolve => setTimeout(resolve, 10000));
-          
-          return true;
+        if (rpcResponse.ok) {
+          console.log('✅ Configuration WiFi via RPC réussie');
+          configSuccess = true;
         } else {
-          console.log('❌ Échec configuration WiFi Shelly:', response.status);
-          return false;
+          console.log('⚠️ Configuration RPC échouée, essai méthode alternative...');
         }
-      } catch (configError) {
-        console.log('❌ Erreur configuration WiFi:', configError);
+      } catch (rpcError) {
+        console.log('⚠️ Erreur RPC, essai méthode alternative:', rpcError);
+      }
+      
+      // Méthode 2: API Settings classique
+      if (!configSuccess) {
+        try {
+          console.log('🔧 Tentative configuration via API Settings...');
+          const settingsConfig = {
+            wifi: {
+              ssid: ssid,
+              pass: password,
+              ip: null,
+              netmask: null,
+              gw: null
+            }
+          };
+          
+          const settingsResponse = await fetch(`http://${shellyIP}/settings`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(settingsConfig)
+          });
+          
+          if (settingsResponse.ok) {
+            console.log('✅ Configuration WiFi via Settings réussie');
+            configSuccess = true;
+          } else {
+            console.log('⚠️ Configuration Settings échouée');
+          }
+        } catch (settingsError) {
+          console.log('❌ Erreur configuration Settings:', settingsError);
+        }
+      }
+      
+      // Méthode 3: API simple
+      if (!configSuccess) {
+        try {
+          console.log('🔧 Tentative configuration via API simple...');
+          const simpleResponse = await fetch(`http://${shellyIP}/settings/wifi?ssid=${encodeURIComponent(ssid)}&pass=${encodeURIComponent(password)}`, {
+            method: 'GET'
+          });
+          
+          if (simpleResponse.ok) {
+            console.log('✅ Configuration WiFi via API simple réussie');
+            configSuccess = true;
+          }
+        } catch (simpleError) {
+          console.log('❌ Erreur configuration simple:', simpleError);
+        }
+      }
+      
+      if (configSuccess) {
+        // 5. Attendre que le Shelly se reconnecte au nouveau WiFi
+        console.log('⏳ Attente de la reconnexion Shelly...');
+        await new Promise(resolve => setTimeout(resolve, 15000));
+        return true;
+      } else {
+        console.log('❌ Toutes les méthodes de configuration ont échoué');
         return false;
       }
       
