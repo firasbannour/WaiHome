@@ -2140,27 +2140,53 @@ export default function MainPage() {
     }
   };
 
-  // Fonction de configuration WiFi simplifiée
+  // Fonction pour retourner au WiFi principal
+  const reconnectToMainWifi = async (ssid: string, password: string) => {
+    try {
+      console.log('🔄 Reconnexion au WiFi principal:', ssid);
+      const result = await WifiManager.connectToProtectedSSID(ssid, password, false);
+      if (result) {
+        console.log('✅ Reconnecté au WiFi principal');
+        return true;
+      } else {
+        console.log('❌ Échec reconnexion au WiFi principal');
+        return false;
+      }
+    } catch (error) {
+      console.log('❌ Erreur reconnexion WiFi principal:', error);
+      return false;
+    }
+  };
+
+  // Fonction de configuration WiFi SIMPLE et FONCTIONNELLE
   const configureShellyWifiSimple = async (ssid: string, password: string) => {
     try {
-      console.log('🔧 Configuration WiFi Shelly simplifiée...');
-      console.log('📡 SSID:', ssid);
+      console.log('🚀 DÉBUT CONFIGURATION WIFI SHELLY SIMPLE');
+      console.log('📡 SSID cible:', ssid);
       
-      // 1. Scanner pour trouver le réseau Shelly AP
+      // ÉTAPE 1: Trouver le réseau Shelly AP
+      console.log('🔍 ÉTAPE 1: Recherche du réseau Shelly AP...');
       const wifiList = await WifiManager.reScanAndLoadWifiList();
+      console.log('📶 Réseaux disponibles:', wifiList.map((w: any) => w.SSID));
+      
       const shellyNetwork = wifiList.find((network: any) => 
-        network && network.SSID && network.SSID.toLowerCase().includes('shelly')
+        network && network.SSID && (
+          network.SSID.toLowerCase().includes('shelly') ||
+          network.SSID.toLowerCase().includes('shellypro') ||
+          network.SSID.toLowerCase().includes('shelly_')
+        )
       );
       
       if (!shellyNetwork) {
         console.log('❌ Aucun réseau Shelly AP trouvé');
+        console.log('💡 Assure-toi que ton Shelly clignote bleu (mode AP)');
         return false;
       }
       
       console.log('✅ Réseau Shelly trouvé:', shellyNetwork.SSID);
       
-      // 2. Se connecter au réseau Shelly AP
-      console.log('🔌 Connexion au réseau Shelly AP...');
+      // ÉTAPE 2: Se connecter au réseau Shelly AP
+      console.log('🔌 ÉTAPE 2: Connexion au réseau Shelly AP...');
       const connectResult = await WifiManager.connectToProtectedSSID(
         shellyNetwork.SSID, 
         '', // Pas de mot de passe pour l'AP Shelly
@@ -2174,28 +2200,93 @@ export default function MainPage() {
       
       console.log('✅ Connecté au réseau Shelly AP');
       
-      // 3. Attendre que la connexion soit stable
-      await new Promise(resolve => setTimeout(resolve, 5000));
+      // ÉTAPE 3: Attendre que la connexion soit stable
+      console.log('⏳ ÉTAPE 3: Attente de la connexion stable...');
+      await new Promise(resolve => setTimeout(resolve, 8000));
       
-      // 4. Configuration WiFi simple via GET
-      console.log('🔧 Configuration WiFi via GET...');
+      // ÉTAPE 4: Configuration WiFi du Shelly
+      console.log('🔧 ÉTAPE 4: Configuration WiFi du Shelly...');
       const shellyIP = '192.168.33.1';
       
+      // Essayer plusieurs méthodes de configuration
+      let configSuccess = false;
+      
+      // Méthode 1: API GET simple
       try {
+        console.log('🔧 Méthode 1: API GET simple...');
         const response = await fetch(`http://${shellyIP}/settings/wifi?ssid=${encodeURIComponent(ssid)}&pass=${encodeURIComponent(password)}`, {
           method: 'GET',
-          timeout: 10000
+          timeout: 15000
         });
         
         if (response.ok) {
-          console.log('✅ Configuration WiFi envoyée avec succès');
-          return true;
+          console.log('✅ Configuration WiFi via GET réussie');
+          configSuccess = true;
         } else {
-          console.log('❌ Échec configuration WiFi:', response.status);
-          return false;
+          console.log('⚠️ GET échoué, essai POST...');
         }
-      } catch (configError) {
-        console.log('❌ Erreur configuration WiFi:', configError);
+      } catch (getError) {
+        console.log('⚠️ Erreur GET:', getError);
+      }
+      
+      // Méthode 2: API POST avec FormData
+      if (!configSuccess) {
+        try {
+          console.log('🔧 Méthode 2: API POST avec FormData...');
+          const formData = new FormData();
+          formData.append('ssid', ssid);
+          formData.append('pass', password);
+          
+          const response = await fetch(`http://${shellyIP}/settings/wifi`, {
+            method: 'POST',
+            body: formData,
+            timeout: 15000
+          });
+          
+          if (response.ok) {
+            console.log('✅ Configuration WiFi via POST réussie');
+            configSuccess = true;
+          } else {
+            console.log('⚠️ POST échoué, essai JSON...');
+          }
+        } catch (postError) {
+          console.log('⚠️ Erreur POST:', postError);
+        }
+      }
+      
+      // Méthode 3: API JSON
+      if (!configSuccess) {
+        try {
+          console.log('🔧 Méthode 3: API JSON...');
+          const response = await fetch(`http://${shellyIP}/settings/wifi`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              ssid: ssid,
+              pass: password
+            }),
+            timeout: 15000
+          });
+          
+          if (response.ok) {
+            console.log('✅ Configuration WiFi via JSON réussie');
+            configSuccess = true;
+          } else {
+            console.log('⚠️ JSON échoué');
+          }
+        } catch (jsonError) {
+          console.log('⚠️ Erreur JSON:', jsonError);
+        }
+      }
+      
+      if (configSuccess) {
+        console.log('🎉 CONFIGURATION WIFI RÉUSSIE !');
+        console.log('⏳ Le Shelly va redémarrer et se connecter à ton WiFi...');
+        return true;
+      } else {
+        console.log('❌ Toutes les méthodes de configuration ont échoué');
         return false;
       }
       
@@ -2945,37 +3036,68 @@ export default function MainPage() {
       console.log('🔍 ÉTAPE 1: Configuration WiFi du Shelly...');
       setAlertMsg(`🔧 Configuration du WiFi Shelly...`);
       
-      // Configuration WiFi du Shelly (processus simplifié)
+      // CONFIGURATION WIFI SHELLY - PROCESSUS SIMPLE ET FONCTIONNEL
       let shellyIP = null;
       try {
         if (pendingWifi && wifiPassword) {
-          console.log('📡 Configuration WiFi Shelly...');
-          setAlertMsg(`📡 Configuration WiFi Shelly...`);
+          console.log('🚀 DÉBUT CONFIGURATION WIFI SHELLY');
+          setAlertMsg(`🔧 Configuration WiFi Shelly...`);
           
-          // Configuration WiFi simplifiée
+          // Configuration WiFi du Shelly
           const wifiConfigSuccess = await configureShellyWifiSimple(pendingWifi, wifiPassword);
           if (wifiConfigSuccess) {
-            console.log('✅ Configuration WiFi envoyée au Shelly');
-            setAlertMsg(`✅ Configuration WiFi envoyée ! Shelly va redémarrer...`);
+            console.log('✅ Configuration WiFi réussie !');
+            setAlertMsg(`✅ Configuration WiFi réussie ! Shelly va redémarrer...`);
             
-            // Attendre que le Shelly redémarre et se connecte
-            await new Promise(resolve => setTimeout(resolve, 20000));
+            // ÉTAPE CRUCIALE: Attendre que le Shelly redémarre et se connecte
+            console.log('⏳ Attente du redémarrage Shelly (30 secondes)...');
+            setAlertMsg(`⏳ Shelly redémarre et se connecte... (30s)`);
+            await new Promise(resolve => setTimeout(resolve, 30000));
             
-            // Chercher le Shelly sur le réseau
-            console.log('🔍 Recherche du Shelly après redémarrage...');
-            setAlertMsg(`🔍 Recherche du Shelly...`);
+            // Retourner à ton WiFi principal
+            console.log('🔄 Retour à ton WiFi principal...');
+            setAlertMsg(`🔄 Retour à ton WiFi...`);
             
-            shellyIP = await scanNetworkForShelly();
-            if (shellyIP) {
-              console.log('✅ Shelly trouvé à l\'IP:', shellyIP);
-              setAlertMsg(`✅ Shelly connecté au WiFi !`);
+            // Se reconnecter à ton WiFi principal
+            const reconnectSuccess = await reconnectToMainWifi(pendingWifi, wifiPassword);
+            if (reconnectSuccess) {
+              console.log('✅ Reconnecté au WiFi principal');
             } else {
-              console.log('⚠️ Shelly pas encore visible - continuer quand même');
-              setAlertMsg(`⚠️ Shelly pas encore visible - site créé quand même`);
+              console.log('⚠️ Reconnexion automatique échouée - reconnecte-toi manuellement');
+              setAlertMsg(`⚠️ Reconnexion automatique échouée - reconnecte-toi manuellement à ton WiFi`);
+            }
+            
+            // Attendre que la connexion soit stable
+            await new Promise(resolve => setTimeout(resolve, 10000));
+            
+            // Chercher le Shelly sur ton réseau
+            console.log('🔍 Recherche du Shelly sur ton réseau...');
+            setAlertMsg(`🔍 Recherche du Shelly sur ton réseau...`);
+            
+            for (let attempt = 1; attempt <= 5; attempt++) {
+              console.log(`🔍 Tentative ${attempt}/5 de trouver le Shelly...`);
+              setAlertMsg(`🔍 Recherche Shelly (${attempt}/5)...`);
+              
+              shellyIP = await scanNetworkForShelly();
+              if (shellyIP) {
+                console.log('🎉 Shelly trouvé à l\'IP:', shellyIP);
+                setAlertMsg(`🎉 Shelly connecté au WiFi !`);
+                break;
+              } else {
+                console.log(`⚠️ Tentative ${attempt} échouée, attente...`);
+                if (attempt < 5) {
+                  await new Promise(resolve => setTimeout(resolve, 5000));
+                }
+              }
+            }
+            
+            if (!shellyIP) {
+              console.log('⚠️ Shelly pas encore visible après 5 tentatives');
+              setAlertMsg(`⚠️ Shelly pas encore visible - il se connectera bientôt`);
             }
           } else {
-            console.log('❌ Configuration WiFi échouée - continuer quand même');
-            setAlertMsg(`⚠️ Configuration WiFi échouée - continuer quand même`);
+            console.log('❌ Configuration WiFi échouée');
+            setAlertMsg(`❌ Configuration WiFi échouée - continuer quand même`);
           }
         } else {
           console.log('⚠️ Pas de WiFi configuré, tentative de scan direct...');
