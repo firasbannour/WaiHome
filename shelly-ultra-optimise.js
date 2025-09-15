@@ -1041,6 +1041,14 @@ function setupEventHandlers() {
           initializeScript();
         }
       });
+      } else if (ev === "mqtt_connected") {
+      print("📡 MQTT connecté - Envoi immédiat des données pour nouvelle connexion...");
+      isConnected = true;
+      // Envoyer immédiatement les données quand MQTT se connecte
+      Timer.set(1000, false, function() {
+        print("📤 Envoi immédiat des données après connexion MQTT...");
+        sendDataToAWS();
+      });
       }
     } catch (e) {
       print("❌ Erreur handler global:", e);
@@ -1399,5 +1407,7 @@ print("💾 Sauvegarde automatique toutes les 15 minutes");
 print("🔄 Restauration automatique après coupure de courant");
 print("⏰ Surveillance AP toutes les 60 secondes");
 print("🔧 Test AP toutes les 5 minutes");
+print("🚀 FONCTION FORCE ENVOI: sendDataToAWS() - Appelable manuellement");
+print("🔍 FONCTION DIAGNOSTIC: getComponentsStatus() - Pour debug");
 initializeScript();
 print("✅ Script chargé et en attente d'initialisation...");

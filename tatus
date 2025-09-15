@@ -1,0 +1,5 @@
+[33m27616f9[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m)[m Add all backend dependencies to package.json for Render deployment
+[33m5a2a77f[m Move backend files to root and add all required dependencies for Render deployment
+[33m715db9a[m Add Express and CORS dependencies for backend server
+[33mbafe366[m Fix package.json start script to use Node.js server instead of Expo
+[33m82576f0[m Fix hardcoded URLs in MainPage.tsx to use Render backend for remote testing

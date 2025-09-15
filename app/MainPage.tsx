@@ -2681,11 +2681,14 @@ export default function MainPage() {
     
     try {
       setIsAddingSite(true);
+      setAlertMsg(`🔍 Recherche d'un appareil Shelly...`);
+      setAlertVisible(true);
+      
       // Safety timeout to avoid being stuck on "Creating..."
       const creationTimeout = setTimeout(() => {
         try { setAddStep(null); } catch {}
         setIsAddingSite(false);
-      }, 7000);
+      }, 15000); // Augmenté à 15 secondes pour la connexion Shelly
       // Empêcher la création de doublons côté local immédiatement
       const normalized = name.toLowerCase();
       const existing = sites.find(s => s.name.toLowerCase() === normalized);
@@ -2701,6 +2704,33 @@ export default function MainPage() {
         return;
       }
 
+      // ÉTAPE 1: FORCER LA CONNEXION À UN SHELLY
+      console.log('🔍 ÉTAPE 1: Recherche et connexion à un appareil Shelly...');
+      setAlertMsg(`🔍 Recherche d'un appareil Shelly disponible...`);
+      
+      // Essayer de scanner le réseau pour trouver un Shelly
+      const shellyIP = await scanNetworkForShelly();
+      if (!shellyIP) {
+        setAlertMsg('❌ Aucun appareil Shelly trouvé sur le réseau. Vérifiez que votre Shelly est allumé et connecté au WiFi.');
+        setAlertVisible(true);
+        clearTimeout(creationTimeout);
+        setIsAddingSite(false);
+        return;
+      }
+      
+      console.log('✅ Shelly trouvé à l\'IP:', shellyIP);
+      setAlertMsg(`✅ Shelly trouvé ! Connexion en cours...`);
+      
+      // Vérifier que le Shelly est accessible
+      const isAccessible = await checkIfShellyIsAccessible();
+      if (!isAccessible) {
+        setAlertMsg('❌ Shelly trouvé mais non accessible. Vérifiez la connexion réseau.');
+        setAlertVisible(true);
+        clearTimeout(creationTimeout);
+        setIsAddingSite(false);
+        return;
+      }
+      
       // VÉRIFIER SI CETTE SHELLY EST DÉJÀ UTILISÉE PAR L'UTILISATEUR
       console.log('🔍 Vérification de l\'unicité de l\'appareil Shelly...');
       const existingSites = await ShellyService.getUserShellyDevices(currentUserId);
@@ -2708,8 +2738,7 @@ export default function MainPage() {
       if (existingSites.success && existingSites.data) {
         const devices = Array.isArray(existingSites.data) ? existingSites.data : [];
         
-        // Vérifier par MAC address ou IP
-        const shellyIP = await scanNetworkForShelly();
+        // Vérifier par MAC address ou IP (shellyIP déjà récupéré plus haut)
         const existingDevice = devices.find((device: any) => {
           // Vérifier par IP si disponible
           if (shellyIP && device.ipAddress && device.ipAddress === shellyIP) {
@@ -2794,22 +2823,40 @@ export default function MainPage() {
         }
         
         // Essayer de lire les vraies valeurs du Shelly via IP (si accessible)
+        console.log('📊 Lecture des composants Shelly en temps réel...');
+        setAlertMsg(`📊 Lecture des données Shelly...`);
+        
         let liveComponents = await readShellyComponents(shellyIP);
-        console.log('📊 Composants détaillés lus depuis Shelly:', JSON.stringify(liveComponents, null, 2));
+        console.log('📊 Composants détaillés lus depuis Shelly (1ère tentative):', JSON.stringify(liveComponents, null, 2));
+        
+        // Si pas de données valides, retry plusieurs fois
+        let retryCount = 0;
+        while (retryCount < 3 && (!liveComponents || !liveComponents.pump)) {
+          retryCount++;
+          console.log(`🔄 Retry ${retryCount}/3 lecture des composants...`);
+          setAlertMsg(`🔄 Retry ${retryCount}/3 lecture des composants...`);
+          await new Promise(resolve => setTimeout(resolve, 2000)); // Attendre 2 secondes
+          liveComponents = await readShellyComponents(shellyIP);
+          console.log(`📊 Composants lus (tentative ${retryCount + 1}):`, JSON.stringify(liveComponents, null, 2));
+        }
+        
+        if (!liveComponents || !liveComponents.pump) {
+          setAlertMsg('❌ Impossible de lire les données Shelly. Vérifiez que le script est installé sur votre Shelly.');
+          setAlertVisible(true);
+          clearTimeout(creationTimeout);
+          setIsAddingSite(false);
+          return;
+        }
         
         // Vérifier si on a récupéré des données valides
         const hasValidData = liveComponents.pump.power > 0 || liveComponents.heater.power > 0 || 
                             liveComponents.auger.power > 0 || liveComponents.highWater.power > 0;
         console.log('✅ Données valides récupérées:', hasValidData);
         
-        // Si pas de données valides, essayer un refresh après un délai
-        if (!hasValidData && shellyIP) {
-          console.log('⏳ Pas de données valides, retry dans 3 secondes...');
-          setTimeout(async () => {
-            console.log('🔄 Retry lecture des composants Shelly...');
-            const retryComponents = await readShellyComponents(shellyIP);
-            console.log('📊 Composants retry:', JSON.stringify(retryComponents, null, 2));
-          }, 3000);
+        if (hasValidData) {
+          setAlertMsg(`✅ Données Shelly récupérées ! Création du site...`);
+        } else {
+          console.log('⚠️ Pas de données de puissance, mais structure OK');
         }
         
         // S'assurer que liveComponents a toujours la structure détaillée complète
