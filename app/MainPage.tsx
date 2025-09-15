@@ -3037,6 +3037,8 @@ export default function MainPage() {
       
       // CONFIGURATION WIFI SHELLY - PROCESSUS SIMPLE ET FONCTIONNEL
       let shellyIP = null;
+      let wifiConfigurationSuccess = false; // Flag pour bloquer la création si échec
+      
       try {
         if (pendingWifi && wifiPassword) {
           console.log('🚀 DÉBUT CONFIGURATION WIFI SHELLY');
@@ -3047,6 +3049,7 @@ export default function MainPage() {
           const wifiConfigSuccess = await configureShellyWifiSimple(pendingWifi, wifiPassword);
           if (wifiConfigSuccess) {
             console.log('✅ Configuration WiFi réussie !');
+            wifiConfigurationSuccess = true; // Marquer comme réussi
             setAlertMsg(`✅ Configuration WiFi réussie ! Shelly va redémarrer...`);
             
             // ÉTAPE CRUCIALE: Attendre que le Shelly redémarre et se connecte
@@ -3097,6 +3100,7 @@ export default function MainPage() {
             }
           } else {
             console.log('❌ Configuration WiFi échouée');
+            wifiConfigurationSuccess = false; // Marquer comme échoué
             setAlertMsg(`❌ Configuration WiFi échouée - continuer quand même`);
           }
         } else {
@@ -3104,6 +3108,7 @@ export default function MainPage() {
           console.log('❌ Condition pendingWifi && wifiPassword = FALSE');
           console.log('❌ pendingWifi:', pendingWifi);
           console.log('❌ wifiPassword:', wifiPassword ? '***' : 'NULL');
+          wifiConfigurationSuccess = true; // Pas de WiFi configuré = OK pour continuer
           shellyIP = await scanNetworkForShelly();
           if (shellyIP) {
             console.log('✅ Shelly trouvé directement à l\'IP:', shellyIP);
@@ -3111,7 +3116,19 @@ export default function MainPage() {
         }
       } catch (wifiError) {
         console.error('❌ Erreur configuration WiFi:', wifiError);
+        wifiConfigurationSuccess = false; // Marquer comme échoué
         setAlertMsg(`⚠️ Erreur configuration WiFi - continuer quand même`);
+      }
+
+      // VÉRIFICATION CRITIQUE : Ne pas créer le site si la configuration WiFi a échoué
+      if (pendingWifi && wifiPassword && !wifiConfigurationSuccess) {
+        console.log('❌ BLOCAGE : Configuration WiFi échouée - Site non créé');
+        setAlertMsg('❌ Configuration WiFi Shelly échouée. Site non créé. Réessayez.');
+        setAlertVisible(true);
+        clearTimeout(creationTimeout);
+        setAddStep(null);
+        setIsAddingSite(false);
+        return;
       }
       
       // VÉRIFIER SI CETTE SHELLY EST DÉJÀ UTILISÉE PAR L'UTILISATEUR (seulement si on a des infos)
