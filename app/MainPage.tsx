@@ -2215,8 +2215,7 @@ export default function MainPage() {
       try {
         console.log('🔧 Méthode 1: API GET simple...');
         const response = await fetch(`http://${shellyIP}/settings/wifi?ssid=${encodeURIComponent(ssid)}&pass=${encodeURIComponent(password)}`, {
-          method: 'GET',
-          timeout: 15000
+          method: 'GET'
         });
         
         if (response.ok) {
@@ -2239,8 +2238,7 @@ export default function MainPage() {
           
           const response = await fetch(`http://${shellyIP}/settings/wifi`, {
             method: 'POST',
-            body: formData,
-            timeout: 15000
+            body: formData
           });
           
           if (response.ok) {
@@ -2266,8 +2264,7 @@ export default function MainPage() {
             body: JSON.stringify({
               ssid: ssid,
               pass: password
-            }),
-            timeout: 15000
+            })
           });
           
           if (response.ok) {
