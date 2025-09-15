@@ -878,12 +878,12 @@ function initializeScript() {
   try {
     if (isInitialized) {
       print("⚠️ Script déjà initialisé, ignoré");
-      return;
-    }
+    return;
+  }
     isInitialized = true;
     print("🚀 Initialisation SIMPLIFIÉE du script...");
     clearAllTimers();
-    forceAPAlwaysActive();
+  forceAPAlwaysActive();
   if (Shelly.getDeviceInfo().ip === "0.0.0.0") {
     print("⚠️ Pas de connexion Wi-Fi - Mode AP activé pour configuration");
     print("📡 AP Shelly actif - Prêt pour configuration WiFi");
@@ -1366,7 +1366,6 @@ function configureShellyWiFi(ssid, password) {
   }
 }
 
-// Exposer la fonction globalement
-global.configureShellyWiFi = configureShellyWiFi;
+// Fonction disponible pour utilisation interne
 
 print("✅ Script chargé et en attente d'initialisation...");
