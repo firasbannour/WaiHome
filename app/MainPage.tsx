@@ -2140,6 +2140,71 @@ export default function MainPage() {
     }
   };
 
+  // Fonction de configuration WiFi simplifiée
+  const configureShellyWifiSimple = async (ssid: string, password: string) => {
+    try {
+      console.log('🔧 Configuration WiFi Shelly simplifiée...');
+      console.log('📡 SSID:', ssid);
+      
+      // 1. Scanner pour trouver le réseau Shelly AP
+      const wifiList = await WifiManager.reScanAndLoadWifiList();
+      const shellyNetwork = wifiList.find((network: any) => 
+        network && network.SSID && network.SSID.toLowerCase().includes('shelly')
+      );
+      
+      if (!shellyNetwork) {
+        console.log('❌ Aucun réseau Shelly AP trouvé');
+        return false;
+      }
+      
+      console.log('✅ Réseau Shelly trouvé:', shellyNetwork.SSID);
+      
+      // 2. Se connecter au réseau Shelly AP
+      console.log('🔌 Connexion au réseau Shelly AP...');
+      const connectResult = await WifiManager.connectToProtectedSSID(
+        shellyNetwork.SSID, 
+        '', // Pas de mot de passe pour l'AP Shelly
+        false
+      );
+      
+      if (!connectResult) {
+        console.log('❌ Échec connexion au réseau Shelly AP');
+        return false;
+      }
+      
+      console.log('✅ Connecté au réseau Shelly AP');
+      
+      // 3. Attendre que la connexion soit stable
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      
+      // 4. Configuration WiFi simple via GET
+      console.log('🔧 Configuration WiFi via GET...');
+      const shellyIP = '192.168.33.1';
+      
+      try {
+        const response = await fetch(`http://${shellyIP}/settings/wifi?ssid=${encodeURIComponent(ssid)}&pass=${encodeURIComponent(password)}`, {
+          method: 'GET',
+          timeout: 10000
+        });
+        
+        if (response.ok) {
+          console.log('✅ Configuration WiFi envoyée avec succès');
+          return true;
+        } else {
+          console.log('❌ Échec configuration WiFi:', response.status);
+          return false;
+        }
+      } catch (configError) {
+        console.log('❌ Erreur configuration WiFi:', configError);
+        return false;
+      }
+      
+    } catch (error) {
+      console.log('❌ Erreur configureShellyWifiSimple:', error);
+      return false;
+    }
+  };
+
   // Fonction pour configurer Wi-Fi via réseau Shelly (connexion réelle)
   const configureShellyWifiViaNetwork = async (ssid: string, password: string) => {
     try {
@@ -2880,46 +2945,37 @@ export default function MainPage() {
       console.log('🔍 ÉTAPE 1: Configuration WiFi du Shelly...');
       setAlertMsg(`🔧 Configuration du WiFi Shelly...`);
       
-      // Configuration WiFi du Shelly (via AP ou réseau principal)
+      // Configuration WiFi du Shelly (processus simplifié)
       let shellyIP = null;
       try {
         if (pendingWifi && wifiPassword) {
           console.log('📡 Configuration WiFi Shelly...');
           setAlertMsg(`📡 Configuration WiFi Shelly...`);
           
-          const wifiConfigSuccess = await configureShellyWifiViaNetwork(pendingWifi, wifiPassword);
+          // Configuration WiFi simplifiée
+          const wifiConfigSuccess = await configureShellyWifiSimple(pendingWifi, wifiPassword);
           if (wifiConfigSuccess) {
-            console.log('✅ Configuration WiFi réussie');
-            setAlertMsg(`✅ Configuration WiFi réussie ! Attente de la connexion...`);
+            console.log('✅ Configuration WiFi envoyée au Shelly');
+            setAlertMsg(`✅ Configuration WiFi envoyée ! Shelly va redémarrer...`);
             
-            // Attendre plus longtemps que le Shelly se connecte au WiFi
-            await new Promise(resolve => setTimeout(resolve, 15000));
+            // Attendre que le Shelly redémarre et se connecte
+            await new Promise(resolve => setTimeout(resolve, 20000));
             
-            // Essayer plusieurs fois de trouver le Shelly
-            for (let attempt = 1; attempt <= 3; attempt++) {
-              console.log(`🔍 Tentative ${attempt}/3 de trouver le Shelly...`);
-              setAlertMsg(`🔍 Recherche Shelly (${attempt}/3)...`);
-              
-              shellyIP = await scanNetworkForShelly();
-              if (shellyIP) {
-                console.log('✅ Shelly trouvé sur le réseau WiFi à l\'IP:', shellyIP);
-                setAlertMsg(`✅ Shelly connecté au WiFi !`);
-                break;
-              } else {
-                console.log(`⚠️ Tentative ${attempt} échouée, attente...`);
-                if (attempt < 3) {
-                  await new Promise(resolve => setTimeout(resolve, 5000));
-                }
-              }
-            }
+            // Chercher le Shelly sur le réseau
+            console.log('🔍 Recherche du Shelly après redémarrage...');
+            setAlertMsg(`🔍 Recherche du Shelly...`);
             
-            if (!shellyIP) {
-              console.log('⚠️ Shelly pas encore visible après 3 tentatives');
-              setAlertMsg(`⚠️ Shelly pas encore visible - il se connectera automatiquement`);
+            shellyIP = await scanNetworkForShelly();
+            if (shellyIP) {
+              console.log('✅ Shelly trouvé à l\'IP:', shellyIP);
+              setAlertMsg(`✅ Shelly connecté au WiFi !`);
+            } else {
+              console.log('⚠️ Shelly pas encore visible - continuer quand même');
+              setAlertMsg(`⚠️ Shelly pas encore visible - site créé quand même`);
             }
           } else {
-            console.log('❌ Configuration WiFi échouée');
-            setAlertMsg(`❌ Configuration WiFi échouée - continuer quand même`);
+            console.log('❌ Configuration WiFi échouée - continuer quand même');
+            setAlertMsg(`⚠️ Configuration WiFi échouée - continuer quand même`);
           }
         } else {
           console.log('⚠️ Pas de WiFi configuré, tentative de scan direct...');
@@ -2930,34 +2986,34 @@ export default function MainPage() {
         }
       } catch (wifiError) {
         console.error('❌ Erreur configuration WiFi:', wifiError);
-        // Continuer quand même, ne pas bloquer la création du site
+        setAlertMsg(`⚠️ Erreur configuration WiFi - continuer quand même`);
       }
       
       // VÉRIFIER SI CETTE SHELLY EST DÉJÀ UTILISÉE PAR L'UTILISATEUR (seulement si on a des infos)
       if (shellyIP || pendingDevice?.id) {
         console.log('🔍 Vérification de l\'unicité de l\'appareil Shelly...');
-        const existingSites = await ShellyService.getUserShellyDevices(currentUserId);
+      const existingSites = await ShellyService.getUserShellyDevices(currentUserId);
+      
+      if (existingSites.success && existingSites.data) {
+        const devices = Array.isArray(existingSites.data) ? existingSites.data : [];
         
-        if (existingSites.success && existingSites.data) {
-          const devices = Array.isArray(existingSites.data) ? existingSites.data : [];
-          
-          // Vérifier par MAC address ou IP
-          const existingDevice = devices.find((device: any) => {
-            // Vérifier par IP si disponible
-            if (shellyIP && device.ipAddress && device.ipAddress === shellyIP) {
-              return true;
-            }
-            // Vérifier par MAC address si disponible
-            if (pendingDevice?.id && device.macAddress && device.macAddress === pendingDevice.id) {
-              return true;
-            }
-            return false;
-          });
-          
-          if (existingDevice) {
+        // Vérifier par MAC address ou IP
+        const existingDevice = devices.find((device: any) => {
+          // Vérifier par IP si disponible
+          if (shellyIP && device.ipAddress && device.ipAddress === shellyIP) {
+            return true;
+          }
+          // Vérifier par MAC address si disponible
+          if (pendingDevice?.id && device.macAddress && device.macAddress === pendingDevice.id) {
+            return true;
+          }
+          return false;
+        });
+        
+        if (existingDevice) {
             console.log('⛔ Appareil Shelly déjà lié à un autre site');
             setAlertMsg("This Shelly device is already linked to one of your sites. To reuse it, please delete the existing site first or choose another device.");
-            setAlertVisible(true);
+              setAlertVisible(true);
             clearTimeout(creationTimeout);
             setIsAddingSite(false);
             return;
