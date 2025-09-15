@@ -3291,17 +3291,6 @@ export default function MainPage() {
           <View style={{width: 40}} />
           <Image source={require('../assets/waihome_logo.png')} style={styles.logoModern} />
           <View style={{flexDirection: 'row', alignItems: 'center'}}>
-            {/* Bouton Refresh */}
-            <TouchableOpacity 
-              style={[styles.profileBtnModern, { marginRight: 8 }]} 
-              onPress={() => {
-                console.log('🔄 Refresh manuel des sites depuis AWS');
-                loadSitesFromAWS();
-              }}
-            >
-              <MaterialIcons name="refresh" size={24} color="#0c7a7e" />
-            </TouchableOpacity>
-            
             {/* Bouton Profile */}
           <TouchableOpacity style={styles.profileBtnModern} onPress={() => (navigation as any).navigate('profile')}>
             {profileImage ? (
