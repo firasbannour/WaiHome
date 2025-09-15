@@ -3013,7 +3013,7 @@ export default function MainPage() {
       const creationTimeout = setTimeout(() => {
         try { setAddStep(null); } catch {}
         setIsAddingSite(false);
-      }, 15000); // Augmenté à 15 secondes pour la connexion Shelly
+      }, 90000); // Augmenté à 90 secondes pour la configuration WiFi Shelly complète
       // Empêcher la création de doublons côté local immédiatement
       const normalized = name.toLowerCase();
       const existing = sites.find(s => s.name.toLowerCase() === normalized);
@@ -3031,6 +3031,8 @@ export default function MainPage() {
 
       // ÉTAPE 1: CONFIGURER LE WIFI DU SHELLY D'ABORD
       console.log('🔍 ÉTAPE 1: Configuration WiFi du Shelly...');
+      console.log('🔍 pendingWifi:', pendingWifi);
+      console.log('🔍 wifiPassword:', wifiPassword ? '***' : 'NULL');
       setAlertMsg(`🔧 Configuration du WiFi Shelly...`);
       
       // CONFIGURATION WIFI SHELLY - PROCESSUS SIMPLE ET FONCTIONNEL
@@ -3038,6 +3040,7 @@ export default function MainPage() {
       try {
         if (pendingWifi && wifiPassword) {
           console.log('🚀 DÉBUT CONFIGURATION WIFI SHELLY');
+          console.log('✅ Condition pendingWifi && wifiPassword = TRUE');
           setAlertMsg(`🔧 Configuration WiFi Shelly...`);
           
           // Configuration WiFi du Shelly
@@ -3098,6 +3101,9 @@ export default function MainPage() {
           }
         } else {
           console.log('⚠️ Pas de WiFi configuré, tentative de scan direct...');
+          console.log('❌ Condition pendingWifi && wifiPassword = FALSE');
+          console.log('❌ pendingWifi:', pendingWifi);
+          console.log('❌ wifiPassword:', wifiPassword ? '***' : 'NULL');
           shellyIP = await scanNetworkForShelly();
           if (shellyIP) {
             console.log('✅ Shelly trouvé directement à l\'IP:', shellyIP);
