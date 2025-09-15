@@ -1,0 +1,17 @@
+[33mcommit da11cd882a55b0b70a005e6f7b1901e8a4e6e605[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m)[m
+Author: Firas Bannour <firasbannour74@gmail.com>
+Date:   Mon Sep 15 12:33:25 2025 +0100
+
+    Fix: Shelly WiFi connection - Force AP mode + Multiple config methods
+
+[33mcommit 31d68ae2686b3e82bd1a507a4cf77ef276d0884d[m
+Author: Firas Bannour <firasbannour74@gmail.com>
+Date:   Mon Sep 15 12:31:20 2025 +0100
+
+    Fix: Real Shelly WiFi configuration via AP connection
+
+[33mcommit f7b8df3974ad05a80c7ba22bc911c63c8c491612[m
+Author: Firas Bannour <firasbannour74@gmail.com>
+Date:   Mon Sep 15 10:55:13 2025 +0100
+
+    Fix: Sites display on MainPage + Shelly WiFi connection during site creation

@@ -4,13 +4,10 @@ let components = {
   auger: { relay: 2, name: "Auger", status: false },
   highWater: { relay: 3, name: "High Water Alarm", status: false }
 };
-
-// Fonction pour forcer tous les outputs en OFF au démarrage
 function forceAllOutputsOff() {
   try {
     print("🔧 FORÇAGE TOUS LES OUTPUTS EN OFF...");
     var turnedOff = 0;
-    
     for (var i = 0; i < 4; i++) {
       try {
         var result = Shelly.call("Switch.Set", { id: i, on: false });
@@ -24,12 +21,10 @@ function forceAllOutputsOff() {
         print("❌ Erreur output " + i + ":", error);
       }
     }
-    
     print("✅ " + turnedOff + "/4 outputs forcés en OFF");
     for (var component in components) {
       components[component].status = false;
     }
-    
     return turnedOff;
   } catch (error) {
     print("❌ Erreur forceAllOutputsOff:", error);
@@ -100,8 +95,6 @@ function clearAllTimers() {
 function startPeriodicTimers() {
   try {
     if (periodicTimersStarted) { print("⚠️ Timers périodiques déjà démarrés"); return; }
-    
-    // Nettoyer d'abord tous les timers existants
     clearAllTimers();
     
     periodicTimersStarted = true;
@@ -111,16 +104,13 @@ function startPeriodicTimers() {
         saveComponentStates(); 
       } 
     });
-    
     if (backupTimer) { 
       allTimers.push(backupTimer); 
       print("✅ Timer sauvegarde démarré (15 minutes)"); 
     }
-    
     print("✅ Tous les timers périodiques démarrés - Total:", allTimers.length);
   } catch (error) {
     print("❌ Erreur démarrage timers périodiques:", error);
-    // En cas d'erreur, nettoyer et réessayer plus tard
     clearAllTimers();
     Timer.set(5000, false, startPeriodicTimers);
   }
@@ -261,12 +251,9 @@ function saveComponentStates() {
     print("💾 Sauvegarde de l'état RÉEL des composants...");
     var currentStates = {};
     var timestamp = new Date().toISOString();
-    
-    // Lire l'état RÉEL de chaque relais
     for (var component in components) {
       var relayId = components[component].relay;
       var realStatus = false;
-      
       try {
         var relayInfo = Shelly.call("Switch.GetStatus", { id: relayId });
         if (relayInfo && typeof relayInfo.output === "boolean") {
@@ -279,7 +266,6 @@ function saveComponentStates() {
         realStatus = components[component].status; // Fallback sur l'état local
         print("⚠️ Lecture état réel " + component + " échouée, utilisation état local");
       }
-      
       currentStates[component] = {
         name: components[component].name,
         relay: relayId,
@@ -288,7 +274,6 @@ function saveComponentStates() {
         lastUpdate: timestamp
       };
     }
-    
     lastKnownStates = currentStates;
     var backupData = {
       timestamp: timestamp,
@@ -296,12 +281,10 @@ function saveComponentStates() {
       uptime: Shelly.getDeviceInfo().uptime,
       states: currentStates
     };
-    
     Shelly.call("Sys.SetFile", {
       name: stateBackupFile,
       data: JSON.stringify(backupData)
     });
-    
     lastSaveAt = now;
     print("✅ État RÉEL sauvegardé - " + getObjectKeys(currentStates).length + " composants");
     print("📊 États RÉELS sauvegardés:");
@@ -315,7 +298,6 @@ function saveComponentStates() {
     print("❌ Erreur sauvegarde état:", error);
     isSavingStates = false;
     lastSaveAt = Date.now();
-    // Retry unique en cas de saturation
     if (error && ("" + error).indexOf("Too many calls") !== -1) {
       if (saveRetryTimer) { Timer.clear(saveRetryTimer); saveRetryTimer = null; }
       saveRetryTimer = Timer.set(3000, false, function() {
@@ -327,7 +309,6 @@ function saveComponentStates() {
     return null;
   }
 }
-// ✅ Configuration simple sans timers
 function ensureRestoreLastConfigured() {
   try {
     print("🔧 Configuration restore_last sur 4 relais...");
@@ -338,7 +319,6 @@ function ensureRestoreLastConfigured() {
           initial_state: "restore_last",
           eco_mode: false
         };
-        
         var ok = Shelly.call("Switch.SetConfig", config);
         if (ok) {
           print("✅ Relay " + i + " configuré restore_last");
@@ -353,13 +333,9 @@ function ensureRestoreLastConfigured() {
     print("❌ Erreur ensureRestoreLastConfigured:", e);
   }
 }
-
-// ✅ Restauration douce : essaie d'abord le fichier, puis la mémoire
 function gentleRestoreFromBackupIfNeeded() {
   try {
     var backup = null;
-    
-    // 1) Essayer de lire le fichier de sauvegarde
     try {
       var file = Shelly.call("Sys.GetFile", { name: stateBackupFile });
       if (file && file.data) {
@@ -369,33 +345,25 @@ function gentleRestoreFromBackupIfNeeded() {
     } catch (e) {
       print("⚠️ Lecture fichier backup échouée:", e);
     }
-    
-    // 2) Si pas de fichier, essayer la mémoire
     if (!backup && lastKnownStates && Object.keys(lastKnownStates).length > 0) {
       backup = { states: lastKnownStates };
       print("📁 Utilisation du backup en mémoire...");
     }
-    
     if (!backup || !backup.states) { 
       print("ℹ️ Aucun backup trouvé"); 
       return; 
     }
-
     var forces = 0;
-    
     for (var comp in backup.states) {
       if (!components[comp]) continue;
       var relayId = backup.states[comp].relay;
       var cible = !!backup.states[comp].status;
-      
       try {
         var st = Shelly.call("Switch.GetStatus", { id: relayId });
         if (st && typeof st.output === "boolean") {
-          // Le hardware a déjà restauré (grâce à restore_last) → on respecte
           components[comp].status = st.output;
           print("🆗 " + comp + " (Relay " + relayId + "): Hardware=" + (st.output ? "ON" : "OFF"));
         } else {
-          // Relay pas dispo → on tente d'appliquer l'état du backup
           var r = Shelly.call("Switch.Set", { id: relayId, on: cible });
           if (r) { 
             components[comp].status = cible; 
@@ -407,22 +375,16 @@ function gentleRestoreFromBackupIfNeeded() {
         print("⚠️ gentleRestore: relay " + relayId + " erreur:", e);
       }
     }
-    
     if (forces > 0) print("✅ gentleRestore: appliqué sur " + forces + " relais");
     else print("🆗 gentleRestore: aucun changement nécessaire");
   } catch (e) {
     print("❌ Erreur gentleRestoreFromBackupIfNeeded:", e);
   }
 }
-
-// ✅ Restauration forcée : essaie d'abord le fichier, puis la mémoire
 function forceRestoreFromBackup() {
   try {
     print("🔧 RESTAURATION FORCÉE depuis le backup...");
-    
     var backup = null;
-    
-    // 1) Essayer de lire le fichier de sauvegarde
     try {
       var file = Shelly.call("Sys.GetFile", { name: stateBackupFile });
       if (file && file.data) {
@@ -432,8 +394,6 @@ function forceRestoreFromBackup() {
     } catch (e) {
       print("⚠️ Lecture fichier backup échouée:", e);
     }
-    
-    // 2) Si pas de fichier, essayer la mémoire
     if (!backup && lastKnownStates && Object.keys(lastKnownStates).length > 0) {
       backup = { states: lastKnownStates };
       print("📁 Utilisation du backup en mémoire...");
@@ -443,16 +403,13 @@ function forceRestoreFromBackup() {
       print("❌ Aucun backup trouvé pour restauration forcée"); 
       return; 
     }
-
     print("📁 Backup trouvé - " + Object.keys(backup.states).length + " composants");
     var restored = 0;
-    
     for (var comp in backup.states) {
       if (!components[comp]) continue;
       var relayId = backup.states[comp].relay;
       var targetState = !!backup.states[comp].status;
       var currentState = components[comp].status;
-      
       print("🔧 " + comp + " (Relay " + relayId + "): Backup=" + (targetState ? "ON" : "OFF") + ", Actuel=" + (currentState ? "ON" : "OFF"));
       
       if (targetState !== currentState) {
@@ -492,8 +449,6 @@ function restoreComponentStates() {
     }
     isRestoringState = true;
     print("🔄 Restauration de l'état des composants après redémarrage...");
-    
-    // D'abord, lire l'état actuel des relays
     print("📊 Lecture de l'état actuel des relays...");
     var currentStates = {};
     var currentAvailable = {};
@@ -517,8 +472,6 @@ function restoreComponentStates() {
         currentStates[component] = false;
       }
     }
-    
-    // Ensuite, lire le fichier de sauvegarde
     var backupData = null;
     try {
       var fileContent = Shelly.call("Sys.GetFile", { name: stateBackupFile });
@@ -529,17 +482,14 @@ function restoreComponentStates() {
     } catch (fileError) {
       print("⚠️ Aucun fichier de sauvegarde trouvé:", fileError);
     }
-    
     if (!backupData || !backupData.states) {
       print("⚠️ Aucun état sauvegardé - Utilisation des états actuels");
       isRestoringState = false;
       return false;
     }
-    
     var restoredCount = 0;
     var states = backupData.states;
     print("📊 Comparaison avec les états sauvegardés:");
-    
     for (var component in states) {
       if (components[component]) {
         var targetState = states[component].status;
@@ -565,8 +515,7 @@ function restoreComponentStates() {
             print("     ❌ Erreur restauration " + component + ":", error);
           }
         } else {
-          // État actuel disponible: on garde le matériel, on ne force pas la sauvegarde
-          if (currentState !== components[component].status) {
+                   if (currentState !== components[component].status) {
             components[component].status = currentState;
           }
           print("     ✅ État matériel prioritaire conservé");
@@ -576,11 +525,8 @@ function restoreComponentStates() {
     
     print("✅ Restauration terminée - " + restoredCount + " composant(s) restauré(s) depuis sauvegarde");
     isRestoringState = false;
-    
-    // Sauvegarder l'état final et envoyer aux sujets MQTT
     saveComponentStates();
     if (isConnected && !isInResetMode) { sendDataToAWS(); }
-    
     if (restoredCount > 0) {
       var restoreMessage = {
         deviceId: Shelly.getDeviceInfo().id,
@@ -629,12 +575,10 @@ function reconcileWithActualStates() {
     print("❌ Erreur reconciliation états:", error);
   }
 }
-// Fonction d'affichage simplifiée
 function displayOutputSteps(component, action, result) {
   try {
     var timestamp = new Date().toISOString();
     print("🔧 " + component.toUpperCase() + " " + action.toUpperCase() + " - " + (result && result.success ? "✅ SUCCÈS" : "❌ ÉCHEC"));
-    
     var stepMessage = {
       deviceId: Shelly.getDeviceInfo().id,
       status: "output_step",
@@ -661,7 +605,6 @@ function displayCurrentComponentStates() {
       var statusText = comp.status ? "ON" : "OFF";     
       print("🔌 " + component.toUpperCase() + " (" + comp.name + ") - Relay " + comp.relay + " - " + statusIcon + " " + statusText);
     }
-    
     var stateMessage = {
       deviceId: Shelly.getDeviceInfo().id,
       status: "startup_states",
@@ -674,8 +617,6 @@ function displayCurrentComponentStates() {
     print("❌ Erreur affichage état composants:", error);
   }
 }
-
-// Fonction simple pour afficher l'état des composants
 function showComponents() {
   print("🔍 État actuel des composants:");
   for (var component in components) {
@@ -685,7 +626,6 @@ function showComponents() {
     print("   " + statusIcon + " " + component + " (" + comp.name + ") - Relay " + comp.relay + ": " + statusText);
   }
 }
-// Fonctions de diagnostic simplifiées
 function checkAllOutputs() {
   try {
     if (isCheckingOutputs) { print("⏳ Vérification déjà en cours"); return; }
@@ -943,14 +883,10 @@ function initializeScript() {
     isInitialized = true;
     print("🚀 Initialisation SIMPLIFIÉE du script...");
     clearAllTimers();
-    
-    // FORCER L'AP TOUJOURS ACTIF même sans WiFi
     forceAPAlwaysActive();
-    
   if (Shelly.getDeviceInfo().ip === "0.0.0.0") {
     print("⚠️ Pas de connexion Wi-Fi - Mode AP activé pour configuration");
     print("📡 AP Shelly actif - Prêt pour configuration WiFi");
-    // Ne pas arrêter l'initialisation, continuer en mode AP
   } else {
     print("✅ WiFi connecté - IP:", Shelly.getDeviceInfo().ip);
   }
@@ -1385,7 +1321,6 @@ print("🔧 Test AP toutes les 5 minutes");
 print("🚀 FONCTION FORCE ENVOI: sendDataToAWS() - Appelable manuellement");
 print("🔍 FONCTION DIAGNOSTIC: getComponentsStatus() - Pour debug");
 initializeScript();
-// DÉMARRER L'AP IMMÉDIATEMENT
 print("🚀 DÉMARRAGE IMMÉDIAT DE L'AP SHELLY...");
 try {
   forceAPAlwaysActive();
@@ -1393,5 +1328,45 @@ try {
 } catch (e) {
   print("❌ Erreur démarrage AP immédiat:", e);
 }
+// Fonction pour configurer le WiFi du Shelly via RPC
+function configureShellyWiFi(ssid, password) {
+  try {
+    print("🔧 Configuration WiFi Shelly via RPC...");
+    print("📡 SSID:", ssid);
+    
+    var wifiConfig = {
+      method: "Shelly.SetWiFiConfig",
+      params: {
+        config: {
+          ssid: ssid,
+          pass: password,
+          ip: null,
+          netmask: null,
+          gw: null
+        }
+      }
+    };
+    
+    var result = Shelly.call("HTTP.POST", {
+      url: "http://127.0.0.1/rpc",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(wifiConfig)
+    });
+    
+    if (result) {
+      print("✅ Configuration WiFi envoyée via RPC");
+      return true;
+    } else {
+      print("❌ Échec configuration WiFi RPC");
+      return false;
+    }
+  } catch (error) {
+    print("❌ Erreur configuration WiFi:", error);
+    return false;
+  }
+}
+
+// Exposer la fonction globalement
+global.configureShellyWiFi = configureShellyWiFi;
 
 print("✅ Script chargé et en attente d'initialisation...");

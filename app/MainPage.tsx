@@ -2193,7 +2193,7 @@ export default function MainPage() {
       try {
         console.log('🔧 Tentative configuration via API RPC...');
         const rpcConfig = {
-          method: 'Wifi.SetConfig',
+          method: 'Shelly.SetWiFiConfig',
           params: {
             config: {
               ssid: ssid,
@@ -2256,20 +2256,42 @@ export default function MainPage() {
         }
       }
       
-      // Méthode 3: API simple
+      // Méthode 3: API simple GET
       if (!configSuccess) {
         try {
-          console.log('🔧 Tentative configuration via API simple...');
+          console.log('🔧 Tentative configuration via API simple GET...');
           const simpleResponse = await fetch(`http://${shellyIP}/settings/wifi?ssid=${encodeURIComponent(ssid)}&pass=${encodeURIComponent(password)}`, {
             method: 'GET'
           });
           
           if (simpleResponse.ok) {
-            console.log('✅ Configuration WiFi via API simple réussie');
+            console.log('✅ Configuration WiFi via API simple GET réussie');
             configSuccess = true;
           }
         } catch (simpleError) {
-          console.log('❌ Erreur configuration simple:', simpleError);
+          console.log('❌ Erreur configuration simple GET:', simpleError);
+        }
+      }
+      
+      // Méthode 4: API simple POST
+      if (!configSuccess) {
+        try {
+          console.log('🔧 Tentative configuration via API simple POST...');
+          const formData = new FormData();
+          formData.append('ssid', ssid);
+          formData.append('pass', password);
+          
+          const postResponse = await fetch(`http://${shellyIP}/settings/wifi`, {
+            method: 'POST',
+            body: formData
+          });
+          
+          if (postResponse.ok) {
+            console.log('✅ Configuration WiFi via API simple POST réussie');
+            configSuccess = true;
+          }
+        } catch (postError) {
+          console.log('❌ Erreur configuration simple POST:', postError);
         }
       }
       
