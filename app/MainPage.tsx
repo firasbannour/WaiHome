@@ -80,6 +80,100 @@ const WIFI_PASSWORDS: Record<string, string> = {
 // Fonction utilitaire pour normaliser les SSID (trim + minuscule)
 const normalize = (s: string) => s.trim().toLowerCase();
 
+// Helper pour fetch avec timeout (remplace AbortSignal.timeout qui ne marche pas en RN)
+async function fetchWithTimeout(url: string, opts: RequestInit = {}, ms = 3000) {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), ms);
+  try { 
+    return await fetch(url, { ...opts, signal: controller.signal }); 
+  }
+  finally { 
+    clearTimeout(id); 
+  }
+}
+
+// VERROU CRITIQUE : Finaliser la création de site seulement si Shelly est vraiment connecté
+async function finalizeSiteCreation(params: {
+  shellyIp: string;
+  ssid: string;
+  siteName: string;
+  currentUserId: string;
+}) {
+  const { shellyIp, ssid, siteName, currentUserId } = params;
+  
+  try {
+    console.log('🔒 VÉRIFICATION CRITIQUE : Test de connexion réelle au Shelly...');
+    
+    // 1. Test de connexion HTTP au Shelly
+    const shellyResponse = await fetchWithTimeout(`http://${shellyIp}/shelly`, {}, 5000);
+    if (!shellyResponse.ok) {
+      throw new Error(`Shelly non accessible sur ${shellyIp}`);
+    }
+    
+    const shellyData = await shellyResponse.json();
+    console.log('✅ Shelly accessible:', shellyData);
+    
+    // 2. Récupérer deviceId et macAddress
+    const deviceId = shellyData.id || shellyData.device?.id || 'unknown';
+    const macAddress = shellyData.mac || shellyData.device?.mac || 'unknown';
+    
+    // 3. Test de connexion simple
+    const connectionTest = await fetchWithTimeout(`http://${shellyIp}/status`, {}, 5000);
+    if (!connectionTest.ok) {
+      throw new Error('Test de connexion Shelly échoué');
+    }
+    
+    console.log('✅ VÉRIFICATION CRITIQUE RÉUSSIE : Shelly opérationnel');
+    
+    // 4. Créer le site dans AWS d'abord
+    const deviceInfo = {
+      deviceId: deviceId,
+      macAddress: macAddress,
+      ipAddress: shellyIp,
+      deviceName: `Shelly-${deviceId.slice(-6)}`,
+      connectionType: 'WIFI' as const,
+      lastConnected: new Date().toISOString(),
+      siteName: siteName,
+      siteId: `${currentUserId}_${deviceId}_${Date.now()}`
+    };
+    
+    const awsResult = await ShellyService.saveShellyDevice(currentUserId, deviceInfo);
+    
+    if (!awsResult.success) {
+      throw new Error(`Erreur AWS: ${awsResult.error || 'Erreur inconnue'}`);
+    }
+    
+    console.log('✅ Site créé dans AWS avec succès');
+    
+    // 5. Maintenant créer localement
+    const newSite: SiteInfo = {
+      id: deviceInfo.siteId,
+      name: siteName,
+      icon: 'home-outline' as McIconName,
+      status: 'Connected' as const,
+      solids: 0,
+      notificationsEnabled: false,
+      deviceInfo: {
+        deviceId: deviceId,
+        macAddress: macAddress,
+        ipAddress: shellyIp,
+        deviceName: deviceInfo.deviceName,
+        connectionType: 'WIFI',
+        lastConnected: new Date().toISOString()
+      }
+    };
+    
+    return { success: true, site: newSite };
+    
+  } catch (error) {
+    console.error('❌ VÉRIFICATION CRITIQUE ÉCHOUÉE:', error);
+    return { 
+      success: false, 
+      error: (error as Error).message || 'Impossible de vérifier la connexion Shelly'
+    };
+  }
+}
+
 export default function MainPage() {
   const navigation = useNavigation();
 
@@ -1119,22 +1213,22 @@ export default function MainPage() {
           })
           .map((device: any) => ({
             id: device.id || `${currentUserId}_${device.deviceId || 'shelly-device'}`,
-            name: device.siteName || 'Unknown Site',
-            icon: 'home-outline' as McIconName,
-            status: device.status === 'Connected' ? 'Connected' : 'Not Connected',
-            solids: (typeof device.solids === 'object' && device.solids !== null)
-              ? (Number(device.solids.total) || 0)
-              : (Number(device.solids) || 0),
-            notificationsEnabled: device.notificationsEnabled || false,
-            deviceInfo: {
-              deviceId: device.deviceId || 'shelly-main-device',
-              macAddress: device.macAddress || 'N/A',
-              ipAddress: device.ipAddress || 'N/A',
-              deviceName: device.deviceName || 'Unknown Device',
-              connectionType: device.connectionType || 'WIFI',
-              lastConnected: device.lastConnected || new Date().toISOString()
-            }
-          }));
+          name: device.siteName || 'Unknown Site',
+          icon: 'home-outline' as McIconName,
+          status: device.status === 'Connected' ? 'Connected' : 'Not Connected',
+          solids: (typeof device.solids === 'object' && device.solids !== null)
+            ? (Number(device.solids.total) || 0)
+            : (Number(device.solids) || 0),
+          notificationsEnabled: device.notificationsEnabled || false,
+          deviceInfo: {
+            deviceId: device.deviceId || 'shelly-main-device',
+            macAddress: device.macAddress || 'N/A',
+            ipAddress: device.ipAddress || 'N/A',
+            deviceName: device.deviceName || 'Unknown Device',
+            connectionType: device.connectionType || 'WIFI',
+            lastConnected: device.lastConnected || new Date().toISOString()
+          }
+        }));
 
         console.log('🔄 Sites convertis depuis AWS:', awsSites);
 
@@ -3015,13 +3109,12 @@ export default function MainPage() {
   };
 
 
-  // Handler pour ajout du site après saisie du nom (étape 2)
+  // Handler pour ajout du site après saisie du nom (étape 2) - VERSION SIMPLIFIÉE AVEC VERROU CRITIQUE
   const handleAddSiteName = async () => {
     const name = newSiteName.trim();
     if (!name) return;
     if (isAddingSite) return;
     
-    // GESTION D'ERREUR ROBUSTE POUR ÉVITER LES CRASHES
     let creationTimeout: NodeJS.Timeout | null = null;
     
     try {
@@ -3033,19 +3126,13 @@ export default function MainPage() {
       creationTimeout = setTimeout(() => {
         try { 
           setAddStep(null); 
-          setIsAddingSite(false);
+        setIsAddingSite(false);
           setAlertVisible(false);
         } catch (error) {
           console.error('❌ Erreur dans timeout:', error);
         }
-      }, 90000); // Augmenté à 90 secondes pour la configuration WiFi Shelly complète
-      // Empêcher la création de doublons côté local immédiatement
-      const normalized = name.toLowerCase();
-      const existing = sites.find(s => s.name.toLowerCase() === normalized);
-      if (existing) {
-        // Remplacer/mettre à jour le site existant au lieu d'en créer un autre
-        console.log('ℹ️ Site déjà existant, mise à jour plutôt que création:', name);
-      }
+      }, 90000);
+      
       // Récupérer l'ID utilisateur actuel
       const currentUserId = await AuthService.getCurrentUserId();
       if (!currentUserId) {
@@ -3054,95 +3141,55 @@ export default function MainPage() {
         return;
       }
 
-      // ÉTAPE 1: CONFIGURER LE WIFI DU SHELLY D'ABORD
-      console.log('🔍 ÉTAPE 1: Configuration WiFi du Shelly...');
+      // NOUVELLE LOGIQUE SIMPLIFIÉE AVEC VERROU CRITIQUE
+      console.log('🔍 Configuration WiFi du Shelly...');
       console.log('🔍 pendingWifi:', pendingWifi);
       console.log('🔍 wifiPassword:', wifiPassword ? '***' : 'NULL');
       setAlertMsg(`🔧 Configuration du WiFi Shelly...`);
       
-      // CONFIGURATION WIFI SHELLY - PROCESSUS SIMPLE ET FONCTIONNEL
       let shellyIP = null;
-      let wifiConfigurationSuccess = false; // Flag pour bloquer la création si échec
+      let wifiConfigurationSuccess = false;
       
-      try {
-        if (pendingWifi && wifiPassword) {
-          console.log('🚀 DÉBUT CONFIGURATION WIFI SHELLY');
-          console.log('✅ Condition pendingWifi && wifiPassword = TRUE');
-          setAlertMsg(`🔧 Configuration WiFi Shelly...`);
+      // ÉTAPE 1: Configuration WiFi du Shelly (si nécessaire)
+      if (pendingWifi && wifiPassword) {
+        console.log('🚀 Configuration WiFi du Shelly...');
+        setAlertMsg(`🔧 Configuration WiFi Shelly...`);
+        
+        const wifiConfigSuccess = await configureShellyWifiSimple(pendingWifi, wifiPassword);
+        if (wifiConfigSuccess) {
+          console.log('✅ Configuration WiFi réussie !');
+          wifiConfigurationSuccess = true;
+          setAlertMsg(`✅ Configuration WiFi réussie ! Shelly va redémarrer...`);
           
-          // Configuration WiFi du Shelly
-          const wifiConfigSuccess = await configureShellyWifiSimple(pendingWifi, wifiPassword);
-          if (wifiConfigSuccess) {
-            console.log('✅ Configuration WiFi réussie !');
-            wifiConfigurationSuccess = true; // Marquer comme réussi
-            setAlertMsg(`✅ Configuration WiFi réussie ! Shelly va redémarrer...`);
-            
-            // ÉTAPE CRUCIALE: Attendre que le Shelly redémarre et se connecte
-            console.log('⏳ Attente du redémarrage Shelly (30 secondes)...');
-            setAlertMsg(`⏳ Shelly redémarre et se connecte... (30s)`);
-            await new Promise(resolve => setTimeout(resolve, 30000));
-            
-            // Retourner à ton WiFi principal
-            console.log('🔄 Retour à ton WiFi principal...');
-            setAlertMsg(`🔄 Retour à ton WiFi...`);
-            
-            // Se reconnecter à ton WiFi principal
-            const reconnectSuccess = await reconnectToMainWifi(pendingWifi, wifiPassword);
-            if (reconnectSuccess) {
-              console.log('✅ Reconnecté au WiFi principal');
+          // Attendre le redémarrage
+          await new Promise(resolve => setTimeout(resolve, 30000));
+          
+          // Retour au WiFi principal
+          await reconnectToMainWifi(pendingWifi, wifiPassword);
+          await new Promise(resolve => setTimeout(resolve, 10000));
+          
+          // Chercher le Shelly sur le réseau
+          for (let attempt = 1; attempt <= 5; attempt++) {
+            setAlertMsg(`🔍 Recherche Shelly (${attempt}/5)...`);
+            shellyIP = await scanNetworkForShelly();
+            if (shellyIP) {
+              console.log('🎉 Shelly trouvé à l\'IP:', shellyIP);
+              setAlertMsg(`🎉 Shelly connecté au WiFi !`);
+              break;
+            }
+            if (attempt < 5) await new Promise(resolve => setTimeout(resolve, 5000));
+          }
             } else {
-              console.log('⚠️ Reconnexion automatique échouée - reconnecte-toi manuellement');
-              setAlertMsg(`⚠️ Reconnexion automatique échouée - reconnecte-toi manuellement à ton WiFi`);
-            }
-            
-            // Attendre que la connexion soit stable
-            await new Promise(resolve => setTimeout(resolve, 10000));
-            
-            // Chercher le Shelly sur ton réseau
-            console.log('🔍 Recherche du Shelly sur ton réseau...');
-            setAlertMsg(`🔍 Recherche du Shelly sur ton réseau...`);
-            
-            for (let attempt = 1; attempt <= 5; attempt++) {
-              console.log(`🔍 Tentative ${attempt}/5 de trouver le Shelly...`);
-              setAlertMsg(`🔍 Recherche Shelly (${attempt}/5)...`);
-              
-              shellyIP = await scanNetworkForShelly();
-              if (shellyIP) {
-                console.log('🎉 Shelly trouvé à l\'IP:', shellyIP);
-                setAlertMsg(`🎉 Shelly connecté au WiFi !`);
-                break;
-              } else {
-                console.log(`⚠️ Tentative ${attempt} échouée, attente...`);
-                if (attempt < 5) {
-                  await new Promise(resolve => setTimeout(resolve, 5000));
-                }
-              }
-            }
-            
-            if (!shellyIP) {
-              console.log('⚠️ Shelly pas encore visible après 5 tentatives');
-              setAlertMsg(`⚠️ Shelly pas encore visible - il se connectera bientôt`);
-            }
-          } else {
-            console.log('❌ Configuration WiFi échouée');
-            wifiConfigurationSuccess = false; // Marquer comme échoué
-            setAlertMsg(`❌ Configuration WiFi échouée - continuer quand même`);
-          }
-        } else {
-          console.log('⚠️ Pas de WiFi configuré, tentative de scan direct...');
-          console.log('❌ Condition pendingWifi && wifiPassword = FALSE');
-          console.log('❌ pendingWifi:', pendingWifi);
-          console.log('❌ wifiPassword:', wifiPassword ? '***' : 'NULL');
-          wifiConfigurationSuccess = true; // Pas de WiFi configuré = OK pour continuer
-          shellyIP = await scanNetworkForShelly();
-          if (shellyIP) {
-            console.log('✅ Shelly trouvé directement à l\'IP:', shellyIP);
-          }
+          console.log('❌ Configuration WiFi échouée');
+          wifiConfigurationSuccess = false;
         }
-      } catch (wifiError) {
-        console.error('❌ Erreur configuration WiFi:', wifiError);
-        wifiConfigurationSuccess = false; // Marquer comme échoué
-        setAlertMsg(`⚠️ Erreur configuration WiFi - continuer quand même`);
+      } else {
+        // Pas de WiFi configuré, scan direct
+        wifiConfigurationSuccess = true;
+        shellyIP = await scanNetworkForShelly();
+        if (shellyIP) {
+          console.log('✅ Shelly trouvé directement à l\'IP:', shellyIP);
+        }
       }
 
       // VÉRIFICATION CRITIQUE : Ne pas créer le site si la configuration WiFi a échoué
@@ -3155,353 +3202,88 @@ export default function MainPage() {
         setIsAddingSite(false);
         return;
       }
-      
-      // VÉRIFIER SI CETTE SHELLY EST DÉJÀ UTILISÉE PAR L'UTILISATEUR (seulement si on a des infos)
-      if (shellyIP || pendingDevice?.id) {
-        console.log('🔍 Vérification de l\'unicité de l\'appareil Shelly...');
-      const existingSites = await ShellyService.getUserShellyDevices(currentUserId);
-      
-      if (existingSites.success && existingSites.data) {
-        const devices = Array.isArray(existingSites.data) ? existingSites.data : [];
+
+      // ÉTAPE 2: VERROU CRITIQUE - Utiliser finalizeSiteCreation
+      if (shellyIP) {
+        console.log('🔒 VERROU CRITIQUE : Test de connexion réelle au Shelly...');
+        setAlertMsg(`🔒 Vérification de la connexion Shelly...`);
         
-        // Vérifier par MAC address ou IP
-        const existingDevice = devices.find((device: any) => {
-          // Vérifier par IP si disponible
-          if (shellyIP && device.ipAddress && device.ipAddress === shellyIP) {
-            return true;
-          }
-          // Vérifier par MAC address si disponible
-          if (pendingDevice?.id && device.macAddress && device.macAddress === pendingDevice.id) {
-            return true;
-          }
-          return false;
+        const finalizeResult = await finalizeSiteCreation({
+          shellyIp: shellyIP,
+          ssid: pendingWifi || 'direct',
+          siteName: name,
+          currentUserId: currentUserId
         });
         
-        if (existingDevice) {
-            console.log('⛔ Appareil Shelly déjà lié à un autre site');
-            setAlertMsg("This Shelly device is already linked to one of your sites. To reuse it, please delete the existing site first or choose another device.");
-              setAlertVisible(true);
-            clearTimeout(creationTimeout);
-            setIsAddingSite(false);
-            return;
-          }
-        }
-      } else {
-        console.log('ℹ️ Pas d\'infos Shelly pour vérification d\'unicité - continuation');
-      }
-
-      // Générer des identifiants STABLES par site (sans Date.now())
-      const generatedDeviceId = pendingDevice?.id || `device-${Date.now()}`;
-      const generatedSiteId = `site-${newSiteName.trim().toLowerCase().replace(/\s+/g, '-')}`;
-      const awsStableId = `${currentUserId}_${generatedDeviceId}_${generatedSiteId}`;
-
-      const deviceInfo = {
-        deviceId: generatedDeviceId,
-        siteId: generatedSiteId,
-        macAddress: pendingDevice?.id || 'N/A',
-        // Utiliser l'IP Shelly détectée si disponible
-        ipAddress: shellyIP || await Network.getIpAddressAsync(),
-        deviceName: pendingDevice?.name || `Shelly-${(pendingDevice?.id || pendingWifi || 'unknown').slice(-6)}`,
-        connectionType: pendingDevice ? 'BLE' as const : 'WIFI' as const,
-        lastConnected: new Date().toISOString()
-      };
-
-      // TEST DE CONNEXION APRÈS CONFIGURATION AVEC RETRY
-      console.log('🧪 Test de connexion après configuration avec retry...');
-      const isConnected = await testShellyConnectionWithRetry(deviceInfo, 5);
-      
-      if (isConnected) {
-        console.log('✅ Shelly est connecté à l\'application !');
-        
-        // CONFIGURER LE COMPORTEMENT APRÈS COUPURE DE COURANT
-        const currentShellyIP = shellyIP || deviceInfo.ipAddress;
-        if (currentShellyIP && currentShellyIP !== 'N/A') {
-          console.log('⚙️ Configuration du comportement après coupure...');
-          console.log('📡 IP Shelly pour configuration:', currentShellyIP);
-          await configureShellyPowerOnBehavior(currentShellyIP);
-        } else {
-          console.log('⚠️ IP Shelly non disponible pour la configuration');
-        }
-      } else {
-        console.log('⚠️ Shelly n\'est pas encore connecté après retry - il se connectera automatiquement');
-        // Ne plus afficher d'alerte bloquante ici: on continue en silencieux et on réessaie en arrière-plan
-      }
-
-      // Vérifier l'état réel de la connexion
-      let connectionStatus: SiteInfo['status'] = isConnected ? "Connected" : "Not Connected";
-
-      // Créer le nouveau site avec l'ID stable AWS
-      const newSite: SiteInfo = {
-        id: awsStableId, // Utiliser l'ID stable AWS
-        name: name,
-        icon: 'home-outline',
-        status: connectionStatus,
-        solids: 0,
-        notificationsEnabled: false,
-        deviceInfo: deviceInfo
-      };
-
-      // Sauvegarder dans AWS DynamoDB D'ABORD avec composants détaillés
-      try {
-        // NOUVEAU : Forcer tous les outputs Shelly en OFF avant de sauvegarder
-        if (shellyIP) {
-          console.log('🔧 Forçage des outputs Shelly en OFF...');
-          await forceShellyOutputsOff(shellyIP);
-          // Attendre un peu que les commandes soient appliquées
-          await new Promise(resolve => setTimeout(resolve, 1000));
-        }
-        
-        // Essayer de lire les vraies valeurs du Shelly via IP (si accessible)
-        console.log('📊 Lecture des composants Shelly en temps réel...');
-        setAlertMsg(`📊 Lecture des données Shelly...`);
-        
-        let liveComponents = null;
-        if (shellyIP) {
-          liveComponents = await readShellyComponents(shellyIP);
-          console.log('📊 Composants détaillés lus depuis Shelly (1ère tentative):', JSON.stringify(liveComponents, null, 2));
-          
-          // Si pas de données valides, retry plusieurs fois
-          let retryCount = 0;
-          while (retryCount < 3 && (!liveComponents || !liveComponents.pump)) {
-            retryCount++;
-            console.log(`🔄 Retry ${retryCount}/3 lecture des composants...`);
-            setAlertMsg(`🔄 Retry ${retryCount}/3 lecture des composants...`);
-            await new Promise(resolve => setTimeout(resolve, 2000)); // Attendre 2 secondes
-            liveComponents = await readShellyComponents(shellyIP);
-            console.log(`📊 Composants lus (tentative ${retryCount + 1}):`, JSON.stringify(liveComponents, null, 2));
-          }
-        } else {
-          console.log('⚠️ Pas d\'IP Shelly disponible pour lecture des composants');
-        }
-        
-        // Si pas de données valides, utiliser des valeurs par défaut
-        if (!liveComponents || !liveComponents.pump) {
-          console.log('⚠️ Impossible de lire les données Shelly - utilisation de valeurs par défaut');
-          setAlertMsg(`⚠️ Shelly pas encore accessible - site créé avec valeurs par défaut`);
-          // Créer des composants par défaut
-          liveComponents = createDetailedComponents('');
-        }
-        
-        // Vérifier si on a récupéré des données valides
-        const hasValidData = liveComponents.pump.power > 0 || liveComponents.heater.power > 0 || 
-                            liveComponents.auger.power > 0 || liveComponents.highWater.power > 0;
-        console.log('✅ Données valides récupérées:', hasValidData);
-        
-        if (hasValidData) {
-          setAlertMsg(`✅ Données Shelly récupérées ! Création du site...`);
-        } else {
-          console.log('⚠️ Pas de données de puissance, mais structure OK');
-        }
-        
-        // S'assurer que liveComponents a toujours la structure détaillée complète
-        if (!liveComponents || typeof liveComponents !== 'object') {
-          console.log('⚠️ liveComponents invalide, création de la structure détaillée par défaut');
-          liveComponents = createDetailedComponents('');
-        }
-        
-        // Vérifier que tous les composants ont la structure détaillée
-        const requiredComponents = ['pump', 'heater', 'auger', 'highWater'];
-        for (const comp of requiredComponents) {
-          if (!liveComponents[comp] || typeof liveComponents[comp] !== 'object' || !liveComponents[comp].name) {
-            console.log(`⚠️ Composant ${comp} manquant ou invalide, création par défaut`);
-            liveComponents[comp] = {
-              name: comp === 'pump' ? 'Pump' : comp === 'heater' ? 'Heater' : comp === 'auger' ? 'Auger' : 'High Water Alarm',
-              relay: comp === 'pump' ? 0 : comp === 'heater' ? 1 : comp === 'auger' ? 2 : 3,
-              status: false,
-              power: 0,
-              voltage: 0,
-              current: 0,
-              energy: 0,
-              temperature: 0,
-            };
-          }
-        }
-        
-        // Sécuriser: forcer heater OFF si besoin pour cohérence initiale
-        if (liveComponents?.heater?.status) {
-          liveComponents = {
-            ...liveComponents,
-            heater: { ...liveComponents.heater, status: false }
-          } as any;
-        }
-        
-        console.log('📊 Composants finaux avec structure détaillée:', JSON.stringify(liveComponents, null, 2));
-        
-        // FORCER la structure détaillée complète pour AWS
-        const deviceDataToSave = {
-          ...deviceInfo,
-          siteName: name,
-          status: connectionStatus,
-          ipAddress: shellyIP || deviceInfo.ipAddress,
-          // S'assurer que components a la structure détaillée complète
-          components: {
-            pump: {
-              name: "Pump",
-              relay: 0,
-              status: liveComponents.pump.status,
-              power: liveComponents.pump.power,
-              voltage: liveComponents.pump.voltage,
-              current: liveComponents.pump.current,
-              energy: liveComponents.pump.energy,
-              temperature: liveComponents.pump.temperature,
-              frequency: liveComponents.pump.frequency || 0
-            },
-            heater: {
-              name: "Heater", 
-              relay: 1,
-              status: liveComponents.heater.status,
-              power: liveComponents.heater.power,
-              voltage: liveComponents.heater.voltage,
-              current: liveComponents.heater.current,
-              energy: liveComponents.heater.energy,
-              temperature: liveComponents.heater.temperature,
-              frequency: liveComponents.heater.frequency || 0
-            },
-            auger: {
-              name: "Auger",
-              relay: 2, 
-              status: liveComponents.auger.status,
-              power: liveComponents.auger.power,
-              voltage: liveComponents.auger.voltage,
-              current: liveComponents.auger.current,
-              energy: liveComponents.auger.energy,
-              temperature: liveComponents.auger.temperature,
-              frequency: liveComponents.auger.frequency || 0
-            },
-            highWater: {
-              name: "High Water Alarm",
-              relay: 3,
-              status: liveComponents.highWater.status,
-              power: liveComponents.highWater.power,
-              voltage: liveComponents.highWater.voltage,
-              current: liveComponents.highWater.current,
-              energy: liveComponents.highWater.energy,
-              temperature: liveComponents.highWater.temperature,
-              frequency: liveComponents.highWater.frequency || 0
-            },
-            // Garder les autres composants comme booléens
-            binReplaced: false,
-            heaterStarted: false,
-            emergency: false
-          }
-        };
-        
-        console.log('💾 Données complètes à sauvegarder dans AWS avec structure détaillée FORCÉE:', JSON.stringify(deviceDataToSave, null, 2));
-        
-        const result = await ShellyService.saveShellyDevice(currentUserId, deviceDataToSave);
-        
-        if (result.success) {
-          console.log('✅ Appareil Shelly sauvegardé dans AWS DynamoDB');
-          
-          // AFFICHER L'ALERTE DE SUCCÈS IMMÉDIATEMENT
-          setAlertMsg(`✅ Site "${name}" créé avec succès ! ${isConnected ? 'Le Shelly est connecté.' : 'Le Shelly se connectera automatiquement.'}`);
+        if (finalizeResult.success) {
+          console.log('✅ VERROU CRITIQUE RÉUSSI : Site créé avec succès');
+          setAlertMsg('✅ Site créé avec succès !');
           setAlertVisible(true);
           
-          // Close modal immediately; sync in background
-          clearTimeout(creationTimeout);
+          // Ajouter le site localement
+          setSites(prev => [...prev, finalizeResult.site!]);
+          
+          // Reset des états
           setAddStep(null);
-          setIsAddingSite(false);
-          // Background sync (non-blocking)
-          (async () => { try { await loadSitesFromAWS(); } catch {} })();
-          setSites(prev => {
-            const map = new Map<string, SiteInfo>();
-            // prioriser le nouveau site pour le même nom
-            const merged = [...prev, newSite];
-            for (const s of merged) {
-              const key = s.id || `${s.name}`;
-              if (!map.has(key)) map.set(key, s);
-            }
-            // Dédupliquer aussi par nom normalisé
-            const byName = new Map<string, SiteInfo>();
-            for (const s of map.values()) {
-              const key = (s.name || '').toLowerCase();
-              if (!byName.has(key)) byName.set(key, s);
-            }
-            const unique = Array.from(byName.values());
-            AsyncStorage.setItem('sites', JSON.stringify(unique));
-            return unique;
-          });
+          setPendingWifi(null);
+          setWifiPassword('');
+          setPendingDevice(null);
+          setNewSiteName('');
           
-          // Vérifications multiples et forcées après création
-          setTimeout(async () => { try { await checkSitesConnectionStatus(true); } catch {} }, 1000);
-          
-          setTimeout(async () => { try { await checkSitesConnectionStatus(true); } catch {} }, 3000);
-          
-          setTimeout(async () => { try { await checkSitesConnectionStatus(true); } catch {} }, 5000);
-          
-          setTimeout(async () => { try { await checkSitesConnectionStatus(true); } catch {} }, 8000);
+          // Background sync
+          setTimeout(async () => { try { await loadSitesFromAWS(); } catch {} }, 1000);
           
         } else {
-          console.error('❌ Erreur lors de la sauvegarde AWS:', result.error);
-          setAlertMsg('AWS save error: ' + result.error);
+          console.log('❌ VERROU CRITIQUE ÉCHOUÉ :', finalizeResult.error);
+          setAlertMsg(`❌ ${finalizeResult.error || 'Erreur inconnue'}`);
           setAlertVisible(true);
-          clearTimeout(creationTimeout);
-          setAddStep(null);
-          setIsAddingSite(false);
-          return;
         }
-      } catch (awsError) {
-        console.error('❌ Erreur lors de la sauvegarde AWS:', awsError);
-        setAlertMsg('AWS save error');
+        
+        // Cleanup
+        if (creationTimeout) clearTimeout(creationTimeout);
+        setIsAddingSite(false);
+        return;
+      } else {
+        console.log('❌ Aucune IP Shelly trouvée');
+        setAlertMsg('❌ Shelly non trouvé sur le réseau. Vérifiez la connexion.');
         setAlertVisible(true);
+        if (creationTimeout) clearTimeout(creationTimeout);
+        setAddStep(null);
+        setIsAddingSite(false);
         return;
       }
 
-      // Réinitialiser l'état (modal may be already closed)
-      setPendingConnection(null);
-      setPendingDevice(null);
-      setPendingWifi(null);
-      setNewSiteName("");
-      setInjectionSsid("");
-      setInjectionPassword("");
-      
-      console.log('✅ Site ajouté avec succès:', name, 'Status:', connectionStatus);
       
     } catch (error) {
       console.error('❌ ERREUR CRITIQUE lors de l\'ajout du site:', error);
       
-      // Gestion d'erreur robuste pour éviter les crashes
-      try {
-        if (creationTimeout) clearTimeout(creationTimeout);
-        setAddStep(null);
-        setIsAddingSite(false);
-        
-        // Message d'erreur plus informatif
-        let errorMessage = 'Erreur lors de la création du site';
-        if (error && typeof error === 'object' && 'message' in error) {
-          const errorMsg = (error as any).message;
-          if (errorMsg.includes('Connection timeout')) {
-            errorMessage = 'Timeout de connexion - vérifiez votre réseau';
-          } else if (errorMsg.includes('Network request failed')) {
-            errorMessage = 'Erreur réseau - vérifiez votre connexion';
-          } else if (errorMsg.includes('AWS')) {
-            errorMessage = 'Erreur serveur - réessayez plus tard';
-          }
+      // Gestion d'erreur simplifiée
+      if (creationTimeout) clearTimeout(creationTimeout);
+      setAddStep(null);
+      setIsAddingSite(false);
+      
+      let errorMessage = 'Erreur lors de la création du site';
+      if (error && typeof error === 'object' && 'message' in error) {
+        const errorMsg = (error as any).message;
+        if (errorMsg.includes('Connection timeout')) {
+          errorMessage = 'Timeout de connexion - vérifiez votre réseau';
+        } else if (errorMsg.includes('Network request failed')) {
+          errorMessage = 'Erreur réseau - vérifiez votre connexion';
+        } else if (errorMsg.includes('AWS')) {
+          errorMessage = 'Erreur serveur - réessayez plus tard';
         }
-        
-        setAlertMsg(`❌ ${errorMessage}`);
-        setAlertVisible(true);
-        
-        // Reset des états pour éviter les états corrompus
-        setPendingWifi(null);
-        setWifiPassword('');
-        setPendingDevice(null);
-        setShellyIP(null);
-        
-      } catch (cleanupError) {
-        console.error('❌ Erreur lors du nettoyage:', cleanupError);
-        // Force reset minimal
-        setIsAddingSite(false);
-        setAlertVisible(true);
-        setAlertMsg('❌ Erreur critique - redémarrez l\'application');
       }
+      
+      setAlertMsg(`❌ ${errorMessage}`);
+      setAlertVisible(true);
+      
+      // Reset des états
+      setPendingWifi(null);
+      setWifiPassword('');
+      setPendingDevice(null);
+      setShellyIP(null);
     } finally {
-      // S'assurer que l'état est toujours réinitialisé
-      try {
-        setIsAddingSite(false);
-      } catch (e) {
-        console.error('❌ Impossible de réinitialiser isAddingSite:', e);
-      }
+      setIsAddingSite(false);
     }
   };
 
