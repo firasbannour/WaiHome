@@ -1550,6 +1550,7 @@ export default function MainPage() {
   const selectWifi = async (_ssid: string, capabilities?: string) => {
     setWifiVisible(false);
     setSelectedSsid(_ssid);
+    setPendingWifi(_ssid); // 🔧 Capture pour la phase critique
     setInjectionPassword("");
     setNewSiteName("");
     // Récupérer le SSID du Wi-Fi auquel le téléphone est connecté
@@ -3001,6 +3002,10 @@ export default function MainPage() {
     }
     setInjectionLoading(true);
     
+    // 🔧 Synchroniser injectionPassword → wifiPassword et selectedSsid → pendingWifi
+    setWifiPassword(password);
+    setPendingWifi(ssid);
+    
     try {
       // Vérifier que le Wi-Fi est activé
       const wifiEnabled = await WifiManager.isEnabled();
@@ -3098,19 +3103,34 @@ export default function MainPage() {
       
       setInjectionLoading(false);
       
-      // SUPPRIMÉ: Ne pas passer à site-name avant vérification Shelly
-      setTimeout(async () => {
-        try {
-          console.log('⏳ Recherche de l\'IP du Shelly en arrière-plan...');
-      const foundIP = await scanNetworkForShelly();
-      if (foundIP) {
-        setShellyIP(foundIP);
-            console.log('✅ Shelly détecté sur', foundIP);
-      } else {
-            console.log('⚠️ Shelly non détecté après configuration (non bloquant)');
+      // 🔒 Ne PAS aller à 'site-name' tant que le Shelly n'est pas joignable
+      setAlertMsg('⏳ Shelly redémarre et se connecte à ton Wi-Fi...');
+      setAlertVisible(true);
+
+      // attendre ~30 s le reboot
+      await new Promise(res => setTimeout(res, 30000));
+
+      // (optionnel) petite pause pour stabiliser la connexion
+      await new Promise(res => setTimeout(res, 10000));
+
+      // tenter 5 fois de trouver l'IP
+      let foundIP: string | null = null;
+      for (let attempt = 1; attempt <= 5; attempt++) {
+        setAlertMsg(`🔍 Recherche Shelly (${attempt}/5)...`);
+        foundIP = await scanNetworkForShelly();
+        if (foundIP) break;
+        if (attempt < 5) await new Promise(r => setTimeout(r, 5000));
       }
-        } catch {}
-      }, 1000);
+
+      if (!foundIP) {
+        setAlertMsg('❌ Impossible de trouver le Shelly. Aucun site n\'a été créé.');
+        setAlertVisible(true);
+        return; // 🔒 STOP : on NE va PAS à 'site-name'
+      }
+
+      setShellyIP(foundIP);
+      setAlertVisible(false);
+      setAddStep('site-name'); // ✅ on n'ouvre le nom de site que maintenant
       
     } catch (error) {
       console.error('❌ Erreur lors de la configuration Wi-Fi:', error);
@@ -3312,18 +3332,7 @@ export default function MainPage() {
     }
   };
 
-  // Handler pour choix du type de site
-  // NOUVEAU: handleAddSiteType() - ne crée plus de site, lance juste le wizard
-  const handleAddSiteType = (typeKey: string) => {
-    const t = TEMPLATES.find(x => x.key === typeKey);
-    if (t) {
-      // Pré-remplir le nom pour l'étape finale
-      setNewSiteName(t.label);
-      // Lancer le wizard de connexion
-      setAddStep('method');
-      // IMPORTANT: ne pas appeler addSite() ici
-    }
-  };
+  // SUPPRIMÉ: handleAddSiteType() - cause des sites fantômes
 
   /* ---------- Render ---------- */
   // Composant bannière Wi-Fi d'origine (aucune, ou à remettre si besoin)
@@ -3802,11 +3811,11 @@ export default function MainPage() {
                 alignItems: 'center', 
                 width: '100%', 
                 marginBottom: 12,
-                opacity: (newSiteName.trim() && !isAddingSite) ? 1 : 0.6
+                opacity: (newSiteName.trim() && !isAddingSite && shellyIP) ? 1 : 0.6
               }}
               onPress={handleAddSiteName}
               activeOpacity={0.85}
-              disabled={!newSiteName.trim() || isAddingSite}
+              disabled={!newSiteName.trim() || isAddingSite || !shellyIP}
             >
               <Text style={{ color: '#fff', fontWeight: '700', fontSize: 18 }}>{isAddingSite ? 'Creating...' : '✅ Create Site'}</Text>
             </TouchableOpacity>
@@ -3819,40 +3828,7 @@ export default function MainPage() {
       </Modal>
 
       {/* Add-Site modal */}
-      <Modal
-        visible={addVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setAddVisible(false)}
-      >
-        <View style={styles.overlay}>
-          <View style={styles.modal}>
-            <Text style={styles.modalTitle}>Add a site</Text>
-            <FlatList
-              data={TEMPLATES}
-              keyExtractor={(i) => i.key}
-              numColumns={3}
-              columnWrapperStyle={{ justifyContent: "space-between" }}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={styles.tplBtn}
-                  onPress={() => handleAddSiteType(item.key)}
-                >
-                  <MaterialCommunityIcons
-                    name={item.icon}
-                    size={30}
-                    color="#0c7a7e"
-                  />
-                  <Text style={styles.tplLbl}>{item.label}</Text>
-                </TouchableOpacity>
-              )}
-            />
-            <TouchableOpacity onPress={() => setAddVisible(false)}>
-              <Text style={styles.cancel}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+      {/* SUPPRIMÉ: Modal "Add a site" - cause des sites fantômes */}
 
       {/* Device scan modal */}
       <Modal
