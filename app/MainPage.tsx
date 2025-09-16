@@ -3176,12 +3176,13 @@ export default function MainPage() {
       }, 90000);
       
       // Récupérer l'ID utilisateur actuel
-      const currentUserId = await AuthService.getCurrentUserId();
-      if (!currentUserId) {
+      const userIdResult = await AuthService.getCurrentUserId();
+      if (!userIdResult || !userIdResult.success) {
         setAlertMsg('Error: User not signed in');
         setAlertVisible(true);
         return;
       }
+      const currentUserId = userIdResult.data || userIdResult.userId || userIdResult;
 
       // NOUVELLE LOGIQUE SIMPLIFIÉE AVEC VERROU CRITIQUE
       console.log('🔍 Configuration WiFi du Shelly...');
