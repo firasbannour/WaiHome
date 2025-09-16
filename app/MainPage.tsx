@@ -1602,8 +1602,50 @@ export default function MainPage() {
       if (foundIP) {
         setShellyIP(foundIP);
         setWifiPasswordModalVisible(false);
-        setAddStep('site-name');
-        setNewSiteName("");
+        
+        // 🔒 NOUVELLE LOGIQUE : Configuration WiFi Shelly + VÉRIFICATION CRITIQUE
+        console.log('🔧 DÉBUT CONFIGURATION WIFI SHELLY...');
+        setAlertMsg('🔧 Configuration WiFi Shelly...');
+        
+        // Configuration WiFi du Shelly
+        const wifiConfigSuccess = await configureShellyWifiSimple(selectedSsid, wifiPassword);
+        if (wifiConfigSuccess) {
+          console.log('✅ Configuration WiFi réussie !');
+          setAlertMsg('✅ Configuration WiFi réussie ! Shelly va redémarrer...');
+          
+          // Attendre le redémarrage
+          await new Promise(resolve => setTimeout(resolve, 30000));
+          
+          // Retour au WiFi principal
+          await reconnectToMainWifi(selectedSsid, wifiPassword);
+          await new Promise(resolve => setTimeout(resolve, 10000));
+          
+          // Chercher le Shelly sur le réseau après redémarrage
+          for (let attempt = 1; attempt <= 5; attempt++) {
+            setAlertMsg(`🔍 Recherche Shelly (${attempt}/5)...`);
+            const newIP = await scanNetworkForShelly();
+            if (newIP) {
+              console.log('🎉 Shelly trouvé après redémarrage à l\'IP:', newIP);
+              setAlertMsg('🎉 Shelly connecté au WiFi !');
+              setShellyIP(newIP);
+              setAddStep('site-name');
+              setNewSiteName("");
+              return;
+            }
+            if (attempt < 5) await new Promise(resolve => setTimeout(resolve, 5000));
+          }
+          
+          // Si pas trouvé après 5 tentatives
+          setAlertMsg('⚠️ Shelly pas encore visible - il se connectera bientôt');
+          setAddStep('site-name');
+          setNewSiteName("");
+        } else {
+          console.log('❌ Configuration WiFi échouée');
+          setAlertMsg('❌ Configuration WiFi Shelly échouée. Site non créé. Réessayez.');
+          setAlertVisible(true);
+          // NE PAS passer à site-name si échec
+          return;
+        }
       } else {
         setShellyIP(null);
         setAlertMsg("⚠️ Configuration finished but Shelly is not connected yet. Make sure it is powered on and on the same network, then try again.");
@@ -3183,7 +3225,7 @@ export default function MainPage() {
           console.log('❌ Configuration WiFi échouée');
           wifiConfigurationSuccess = false;
         }
-      } else {
+        } else {
         // Pas de WiFi configuré, scan direct
         wifiConfigurationSuccess = true;
         shellyIP = await scanNetworkForShelly();
@@ -3210,7 +3252,7 @@ export default function MainPage() {
         
         const finalizeResult = await finalizeSiteCreation({
           shellyIp: shellyIP,
-          ssid: pendingWifi || 'direct',
+          ssid: selectedSsid || pendingWifi || 'direct',
           siteName: name,
           currentUserId: currentUserId
         });
@@ -3229,6 +3271,8 @@ export default function MainPage() {
           setWifiPassword('');
           setPendingDevice(null);
           setNewSiteName('');
+          setSelectedSsid(null);
+          setShellyIP(null);
           
           // Background sync
           setTimeout(async () => { try { await loadSitesFromAWS(); } catch {} }, 1000);
