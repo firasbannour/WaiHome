@@ -18,7 +18,6 @@
       },
       "package": "com.arijtilouche.waihomeuser",
       "jsEngine": "hermes",
-      "usesCleartextTraffic": true,
       "permissions": [
         "android.permission.BLUETOOTH",
         "android.permission.BLUETOOTH_ADMIN",
