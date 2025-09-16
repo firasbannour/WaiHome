@@ -3152,7 +3152,7 @@ export default function MainPage() {
     if (!name) return;
     if (isAddingSite) return;
     
-    let creationTimeout: NodeJS.Timeout | null = null;
+    let creationTimeout: ReturnType<typeof setTimeout> | null = null;
     
     try {
       setIsAddingSite(true);
@@ -3812,13 +3812,9 @@ export default function MainPage() {
               activeOpacity={0.85}
               disabled={!newSiteName.trim() || isAddingSite || !shellyIP}
             >
-              {isAddingSite ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <Text style={{ color: '#fff', fontWeight: '800', fontSize: 17 }}>
-                  Create site
-                </Text>
-              )}
+              <Text style={{ color: '#fff', fontWeight: '800', fontSize: 16 }}>
+                {isAddingSite ? 'Creating…' : 'Add Site'}
+              </Text>
             </TouchableOpacity>
 
             <TouchableOpacity onPress={() => setAddStep(null)} style={{ marginTop: 4 }}>
