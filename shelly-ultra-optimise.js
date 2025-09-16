@@ -1365,7 +1365,4 @@ function configureShellyWiFi(ssid, password) {
     return false;
   }
 }
-
-// Fonction disponible pour utilisation interne
-
 print("✅ Script chargé et en attente d'initialisation...");

@@ -14,9 +14,9 @@ export class ShellyService {
       console.log('🔍 Test de connectivité au backend...');
       console.log('📍 URL testée: https://waihome-3.onrender.com/health');
       
-      // Test avec timeout et gestion d'erreur améliorée
+      // Test avec timeout et gestion d'erreur améliorée (augmenté à 20s + 1 retry)
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000);
+      const timeoutId = setTimeout(() => controller.abort(), 20000);
       
       const response = await fetch('https://waihome-3.onrender.com/health', {
         method: 'GET',
@@ -42,7 +42,21 @@ export class ShellyService {
       
       // Détails de l'erreur
       if (error.name === 'AbortError') {
-        return { success: false, error: 'Connection timeout (10s)' };
+        // Petite attente puis un retry unique pour les cold starts Render
+        try {
+          console.log('⏳ Timeout 20s – nouvel essai unique...');
+          await new Promise(r => setTimeout(r, 1500));
+          const ctrl2 = new AbortController();
+          const to2 = setTimeout(() => ctrl2.abort(), 20000);
+          const res2 = await fetch('https://waihome-3.onrender.com/health', { method: 'GET', signal: ctrl2.signal });
+          clearTimeout(to2);
+          if (res2.ok) {
+            const data2 = await res2.json();
+            console.log('✅ Backend connection successful (retry):', data2);
+            return { success: true, data: data2 };
+          }
+        } catch {}
+        return { success: false, error: 'Connection timeout (20s)' };
       } else if (error.message.includes('Network request failed')) {
         return { success: false, error: 'Network unreachable - check connectivity' };
       } else if (error.message.includes('fetch')) {
@@ -56,11 +70,10 @@ export class ShellyService {
   // Sauvegarder les coordonnées Shelly d'un utilisateur
   static async saveShellyDevice(userId, deviceInfo) {
     try {
-      // Test de connectivité d'abord
+      // Test de connectivité d'abord (ne bloque plus immédiatement en cas d'échec)
       const connectionTest = await this.testConnection();
       if (!connectionTest.success) {
-        console.error('❌ Unable to connect to backend:', connectionTest.error);
-        return { success: false, error: `Connection impossible: ${connectionTest.error}` };
+        console.error('⚠️ Backend not immediately reachable, proceeding with save attempt:', connectionTest.error);
       }
 
       const token = await AuthService.getCurrentUser();
