@@ -1551,14 +1551,9 @@ export default function MainPage() {
     setWifiVisible(false);
     setSelectedSsid(_ssid);
     setPendingWifi(_ssid); // 🔧 Capture pour la phase critique
+    setInjectionSsid(_ssid); // 👈 Pré-remplir avec le SSID choisi (pas le téléphone)
     setInjectionPassword("");
     setNewSiteName("");
-    // Récupérer le SSID du Wi-Fi auquel le téléphone est connecté
-    let phoneSsid = "";
-    try {
-      phoneSsid = await WifiManager.getCurrentWifiSSID();
-    } catch {}
-    setInjectionSsid(phoneSsid || "");
     setAddStep('wifi-inject');
   };
 
@@ -3263,8 +3258,8 @@ export default function MainPage() {
           setAlertMsg('✅ Site créé avec succès !');
           setAlertVisible(true);
           
-          // Ajouter le site localement
-          setSites(prev => [...prev, finalizeResult.site!]);
+          // Ajouter le site localement avec persistance immédiate
+          await persistSites([...sites, finalizeResult.site!]);
           
           // Reset des états
           setAddStep(null);
@@ -3804,7 +3799,7 @@ export default function MainPage() {
             
             <TouchableOpacity
               style={{ 
-                backgroundColor: newSiteName.trim() ? '#0c7a7e' : '#ccc', 
+                backgroundColor: (newSiteName.trim() && !isAddingSite && shellyIP) ? '#0c7a7e' : '#ccc', 
                 borderRadius: 16, 
                 paddingVertical: 16, 
                 paddingHorizontal: 40, 
@@ -3817,18 +3812,155 @@ export default function MainPage() {
               activeOpacity={0.85}
               disabled={!newSiteName.trim() || isAddingSite || !shellyIP}
             >
-              <Text style={{ color: '#fff', fontWeight: '700', fontSize: 18 }}>{isAddingSite ? 'Creating...' : '✅ Create Site'}</Text>
+              {isAddingSite ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Text style={{ color: '#fff', fontWeight: '800', fontSize: 17 }}>
+                  Create site
+                </Text>
+              )}
             </TouchableOpacity>
-            
-            <TouchableOpacity onPress={() => setAddStep(null)} style={{ marginTop: 6 }}>
-              <Text style={{ color: '#b35b2a', fontWeight: '600', fontSize: 15, textAlign: 'center' }}>Cancel</Text>
+
+            <TouchableOpacity onPress={() => setAddStep(null)} style={{ marginTop: 4 }}>
+              <Text style={{ color: '#b35b2a', fontWeight: '700', fontSize: 15, textAlign: 'center' }}>
+                Cancel
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
       </Modal>
 
-      {/* Add-Site modal */}
-      {/* SUPPRIMÉ: Modal "Add a site" - cause des sites fantômes */}
+      {/* Rename site modal */}
+      <Modal
+        visible={renameVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setRenameVisible(false)}
+      >
+        <View style={styles.overlay}>
+          <View style={[styles.modal, { paddingVertical: 28, paddingHorizontal: 22, borderRadius: 20 }]}>
+            <TouchableOpacity style={styles.close} onPress={() => setRenameVisible(false)}>
+              <MaterialIcons name="close" size={22} color="#b35b2a" />
+            </TouchableOpacity>
+            <Text style={[styles.modalTitle, { marginBottom: 12 }]}>Rename site</Text>
+            <TextInput
+              value={renameText}
+              onChangeText={setRenameText}
+              placeholder="New name"
+              placeholderTextColor="#888"
+              style={{
+                borderWidth: 1.5,
+                borderColor: '#e3e8ee',
+                borderRadius: 12,
+                paddingHorizontal: 14,
+                paddingVertical: 12,
+                fontSize: 16,
+                color: '#222',
+                backgroundColor: '#f7fafb',
+                marginBottom: 16,
+              }}
+              returnKeyType="done"
+              onSubmitEditing={confirmRename}
+              autoFocus
+            />
+            <TouchableOpacity
+              onPress={confirmRename}
+              style={{
+                backgroundColor: renameText.trim() ? '#0c7a7e' : '#ccc',
+                borderRadius: 12,
+                paddingVertical: 12,
+                alignItems: 'center',
+              }}
+              disabled={!renameText.trim()}
+              activeOpacity={0.85}
+            >
+              <Text style={{ color: '#fff', fontWeight: '700' }}>Save</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Delete confirmation modal */}
+      <Modal
+        visible={deleteVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setDeleteVisible(false)}
+      >
+        <View style={styles.overlay}>
+          <View style={[styles.modal, { paddingVertical: 28, paddingHorizontal: 22, borderRadius: 20 }]}>
+            <TouchableOpacity style={styles.close} onPress={() => setDeleteVisible(false)}>
+              <MaterialIcons name="close" size={22} color="#b35b2a" />
+            </TouchableOpacity>
+            <Text style={[styles.modalTitle, { marginBottom: 10 }]}>Delete site</Text>
+            <Text style={{ color: '#444', marginBottom: 18, textAlign: 'center' }}>
+              Are you sure you want to delete{' '}
+              <Text style={{ fontWeight: '700' }}>{siteToDelete?.name}</Text>?
+            </Text>
+            <View style={{ flexDirection: 'row' }}>
+              <TouchableOpacity
+                onPress={() => setDeleteVisible(false)}
+                style={{
+                  flex: 1,
+                  marginRight: 8,
+                  borderRadius: 12,
+                  borderWidth: 1.5,
+                  borderColor: '#e3e8ee',
+                  paddingVertical: 12,
+                  alignItems: 'center',
+                }}
+                activeOpacity={0.85}
+              >
+                <Text style={{ color: '#333', fontWeight: '700' }}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={confirmDeleteSite}
+                style={{
+                  flex: 1,
+                  marginLeft: 8,
+                  borderRadius: 12,
+                  paddingVertical: 12,
+                  alignItems: 'center',
+                  backgroundColor: '#b35b2a',
+                }}
+                activeOpacity={0.9}
+              >
+                <Text style={{ color: '#fff', fontWeight: '800' }}>Delete</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Info / error alert modal */}
+      <Modal
+        visible={alertVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setAlertVisible(false)}
+      >
+        <View style={styles.overlay}>
+          <View style={[styles.modal, { paddingVertical: 24, paddingHorizontal: 22, borderRadius: 18 }]}>
+            <Text style={[styles.modalTitle, { marginBottom: 12 }]}>Notice</Text>
+            <ScrollView style={{ maxHeight: 180 }}>
+              <Text style={{ color: '#333', lineHeight: 20 }}>{alertMsg}</Text>
+            </ScrollView>
+            <TouchableOpacity
+              onPress={() => setAlertVisible(false)}
+              style={{
+                marginTop: 16,
+                backgroundColor: '#0c7a7e',
+                borderRadius: 12,
+                paddingVertical: 12,
+                alignItems: 'center',
+              }}
+              activeOpacity={0.85}
+            >
+              <Text style={{ color: '#fff', fontWeight: '800' }}>OK</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       {/* Device scan modal */}
       <Modal
