@@ -241,10 +241,9 @@ export default function MainPage() {
 
       // Test de connectivité d'abord
       try {
-        const testResponse = await fetch(`http://${targetIp}/shelly`, { 
-          method: 'GET', 
-          signal: AbortSignal.timeout(3000) 
-        });
+        const testResponse = await fetchWithTimeout(`http://${targetIp}/shelly`, { 
+          method: 'GET'
+        }, 3000);
         if (!testResponse.ok) {
           console.log('❌ Shelly non accessible via IP:', targetIp);
           return createDetailedComponents('');
@@ -252,10 +251,9 @@ export default function MainPage() {
         console.log('✅ Shelly accessible via IP:', targetIp);
         
         // Tester l'API RPC
-        const rpcTest = await fetch(`http://${targetIp}/rpc/Switch.GetStatus?id=0`, { 
-          method: 'GET', 
-          signal: AbortSignal.timeout(3000) 
-        });
+        const rpcTest = await fetchWithTimeout(`http://${targetIp}/rpc/Switch.GetStatus?id=0`, { 
+          method: 'GET'
+        }, 3000);
         if (rpcTest.ok) {
           console.log('✅ API RPC accessible');
         } else {
@@ -1635,10 +1633,10 @@ export default function MainPage() {
             if (attempt < 5) await new Promise(resolve => setTimeout(resolve, 5000));
           }
           
-          // Si pas trouvé après 5 tentatives
-          setAlertMsg('⚠️ Shelly pas encore visible - il se connectera bientôt');
-          setAddStep('site-name');
-          setNewSiteName("");
+          // Si pas trouvé après 5 tentatives - NE PAS passer à site-name
+          setAlertMsg('⚠️ Shelly pas encore visible - vérifiez la connexion et réessayez');
+          setAlertVisible(true);
+          // IMPORTANT: Ne pas passer à site-name sans IP Shelly
         } else {
           console.log('❌ Configuration WiFi échouée');
           setAlertMsg('❌ Configuration WiFi Shelly échouée. Site non créé. Réessayez.');
@@ -1661,29 +1659,11 @@ export default function MainPage() {
 
   /* ---------- Sites helpers ---------- */
   // Ajoute un site avec statut "Not Connected" par défaut
-  const addSite = (name: string) => {
-    const fresh: SiteInfo = {
-      id: Date.now().toString(),
-      name,
-      icon: 'home-outline', // ou une icône par défaut
-      status: "Not Connected", // Par défaut, pas connecté
-      solids: 0,
-      notificationsEnabled: false,
-    };
-    persistSites([...sites, fresh]);
-  };
+  // SUPPRIMÉ: addSite() - cause des sites fantômes
+  // La création se fait uniquement via finalizeSiteCreation() après vérification
 
-  const onTemplate = (k: string) => {
-    setAddVisible(false);
-    if (k === "custom") {
-      Alert.prompt("Custom Site", "Enter name", (t) =>
-        t?.trim() && addSite(t.trim())
-      );
-      return;
-    }
-    const t = TEMPLATES.find((x) => x.key === k)!;
-    addSite(t.label);
-  };
+  // SUPPRIMÉ: onTemplate() - cause des sites fantômes
+  // Le nouveau flux passe par setAddStep('method') uniquement
 
   // 2. Fonction pour ouvrir le modal de renommage
   const openRename = (site: SiteInfo) => {
@@ -3333,39 +3313,16 @@ export default function MainPage() {
   };
 
   // Handler pour choix du type de site
+  // NOUVEAU: handleAddSiteType() - ne crée plus de site, lance juste le wizard
   const handleAddSiteType = (typeKey: string) => {
-    let label = typeKey;
-    let icon: McIconName = 'home-outline';
-    if (typeKey === 'custom') {
-      Alert.prompt("Custom Site", "Enter name", (t) => {
-        if (t?.trim()) {
-          addSite(t.trim());
-          setAddStep(null);
-          setPendingConnection(null);
-          setPendingDevice(null);
-          setPendingWifi(null);
-        }
-      });
-      return;
-    }
-    const t = TEMPLATES.find((x) => x.key === typeKey);
+    const t = TEMPLATES.find(x => x.key === typeKey);
     if (t) {
-      label = t.label;
-      icon = t.icon;
+      // Pré-remplir le nom pour l'étape finale
+      setNewSiteName(t.label);
+      // Lancer le wizard de connexion
+      setAddStep('method');
+      // IMPORTANT: ne pas appeler addSite() ici
     }
-    const fresh: SiteInfo = {
-      id: Date.now().toString(),
-      name: label,
-      icon,
-      status: "Not Connected", // Par défaut, pas connecté
-      solids: 0,
-      notificationsEnabled: false,
-    };
-    persistSites([...sites, fresh]);
-    setAddStep(null);
-    setPendingConnection(null);
-    setPendingDevice(null);
-    setPendingWifi(null);
   };
 
   /* ---------- Render ---------- */
@@ -3879,7 +3836,7 @@ export default function MainPage() {
               renderItem={({ item }) => (
                 <TouchableOpacity
                   style={styles.tplBtn}
-                  onPress={() => onTemplate(item.key)}
+                  onPress={() => handleAddSiteType(item.key)}
                 >
                   <MaterialCommunityIcons
                     name={item.icon}
