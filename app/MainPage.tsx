@@ -10,35 +10,28 @@ import {
   Animated,
   FlatList,
   SafeAreaView,
-  Alert,
   Image,
   Platform,
   PermissionsAndroid,
   ActivityIndicator,
   Switch,
   TextInput,
-  Pressable,
   Linking,
 } from "react-native";
 import { useNavigation } from '@react-navigation/native';
 import { Vibration, AccessibilityInfo } from 'react-native';
 import { AuthService } from '../services/authService';
-import { BleManager, State, Device, Characteristic, BleError } from "react-native-ble-plx";
+import { BleManager, State } from "react-native-ble-plx";
 import WifiManager from "react-native-wifi-reborn";
 import { Base64 } from "js-base64";
 import {
-  FontAwesome,
   MaterialIcons,
-  
-  FontAwesome5,
   MaterialCommunityIcons,
 } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { LinearGradient } from 'expo-linear-gradient';
-import { Easing } from 'react-native';
 import * as Network from 'expo-network';
 import { ShellyService } from '../services/shellyService';
-import { createDetailedComponents, updateComponentDetailed } from '../lib/utils/componentUtils';
+import { createDetailedComponents } from '../lib/utils/componentUtils';
 
 type McIconName = keyof typeof MaterialCommunityIcons.glyphMap;
 
@@ -63,22 +56,6 @@ interface SiteInfo {
   };
 }
 
-const TEMPLATES: { key: string; label: string; icon: McIconName }[] = [
-  { key: "home", label: "Home", icon: "home-outline" },
-  { key: "office", label: "Office", icon: "office-building-outline" },
-  { key: "farm", label: "Farm", icon: "barn" },
-];
-
-// Liste simulée des SSID et mots de passe corrects pour la démo
-const WIFI_PASSWORDS: Record<string, string> = {
-  "Livebox-1234": "azertyuiop",
-  "Freebox-5678": "motdepasse2",
-  "SFR-Home": "12345678",
-  // Ajoute d'autres SSID/mots de passe ici si besoin
-};
-
-// Fonction utilitaire pour normaliser les SSID (trim + minuscule)
-const normalize = (s: string) => s.trim().toLowerCase();
 
 // Helper pour fetch avec timeout (remplace AbortSignal.timeout qui ne marche pas en RN)
 async function fetchWithTimeout(url: string, opts: RequestInit = {}, ms = 3000) {
@@ -195,10 +172,9 @@ export default function MainPage() {
   /* ---------- UI state ---------- */
   const [sites, setSites] = useState<SiteInfo[]>([]);
   const [addVisible, setAddVisible] = useState(false);
-  const [devVisible, setDevVisible] = useState(false);
+  const [, setDevVisible] = useState(false);
   const [alertVisible, setAlertVisible] = useState(false);
   const [alertMsg, setAlertMsg] = useState("");
-  const siteCounters = useRef<Record<string, number>>({});
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
   // Heure et date actuelles
@@ -1265,6 +1241,19 @@ export default function MainPage() {
     // Vérifier les permissions Bluetooth d'abord
     if (Platform.OS === "android") {
       try {
+        // Demander permission de localisation pour Android < 12
+        if (Platform.Version < 31) {
+          const loc = await PermissionsAndroid.request(
+            PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+            { title: "Location permission", message: "Required to scan for BLE devices", buttonPositive: "OK" }
+          );
+          if (loc !== PermissionsAndroid.RESULTS.GRANTED) {
+            setAlertMsg("Location permission is required to scan for devices");
+            setAlertVisible(true);
+            return;
+          }
+        }
+        
         const bluetoothPermission = await PermissionsAndroid.request(
           PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
           {
@@ -1385,6 +1374,14 @@ export default function MainPage() {
       
       if (Platform.OS === "android") {
         console.log('📱 Plateforme Android détectée');
+        
+        // Demander les permissions Wi-Fi (Android 13+)
+        if (Platform.Version >= 33) {
+          await PermissionsAndroid.request(
+            PermissionsAndroid.PERMISSIONS.NEARBY_WIFI_DEVICES,
+            { title: "Nearby Wi-Fi permission", message: "Required to scan Wi-Fi networks", buttonPositive: "OK" }
+          );
+        }
         
         // Demander les permissions de localisation
         const granted = await PermissionsAndroid.request(
@@ -1622,8 +1619,8 @@ export default function MainPage() {
               console.log('🎉 Shelly trouvé après redémarrage à l\'IP:', newIP);
               setAlertMsg('🎉 Shelly connecté au WiFi !');
               setShellyIP(newIP);
-              setAddStep('site-name');
-              setNewSiteName("");
+        setAddStep('site-name');
+        setNewSiteName("");
               return;
             }
             if (attempt < 5) await new Promise(resolve => setTimeout(resolve, 5000));
@@ -3185,7 +3182,7 @@ export default function MainPage() {
       console.log('🔍 wifiPassword:', wifiPassword ? '***' : 'NULL');
       setAlertMsg(`🔧 Configuration du WiFi Shelly...`);
       
-      let shellyIP = null;
+      let foundShellyIP: string | null = null;
       let wifiConfigurationSuccess = false;
       
       // ÉTAPE 1: Configuration WiFi du Shelly (si nécessaire)
@@ -3209,24 +3206,24 @@ export default function MainPage() {
           // Chercher le Shelly sur le réseau
           for (let attempt = 1; attempt <= 5; attempt++) {
             setAlertMsg(`🔍 Recherche Shelly (${attempt}/5)...`);
-            shellyIP = await scanNetworkForShelly();
-            if (shellyIP) {
-              console.log('🎉 Shelly trouvé à l\'IP:', shellyIP);
+            foundShellyIP = await scanNetworkForShelly();
+            if (foundShellyIP) {
+              console.log('🎉 Shelly trouvé à l\'IP:', foundShellyIP);
               setAlertMsg(`🎉 Shelly connecté au WiFi !`);
               break;
             }
             if (attempt < 5) await new Promise(resolve => setTimeout(resolve, 5000));
           }
-            } else {
+        } else {
           console.log('❌ Configuration WiFi échouée');
           wifiConfigurationSuccess = false;
         }
         } else {
         // Pas de WiFi configuré, scan direct
         wifiConfigurationSuccess = true;
-        shellyIP = await scanNetworkForShelly();
-        if (shellyIP) {
-          console.log('✅ Shelly trouvé directement à l\'IP:', shellyIP);
+        foundShellyIP = await scanNetworkForShelly();
+        if (foundShellyIP) {
+          console.log('✅ Shelly trouvé directement à l\'IP:', foundShellyIP);
         }
       }
 
@@ -3242,12 +3239,12 @@ export default function MainPage() {
       }
 
       // ÉTAPE 2: VERROU CRITIQUE - Utiliser finalizeSiteCreation
-      if (shellyIP) {
+      if (foundShellyIP) {
         console.log('🔒 VERROU CRITIQUE : Test de connexion réelle au Shelly...');
         setAlertMsg(`🔒 Vérification de la connexion Shelly...`);
         
         const finalizeResult = await finalizeSiteCreation({
-          shellyIp: shellyIP,
+          shellyIp: foundShellyIP!,
           ssid: selectedSsid || pendingWifi || 'direct',
           siteName: name,
           currentUserId: currentUserId
@@ -3283,13 +3280,13 @@ export default function MainPage() {
         if (creationTimeout) clearTimeout(creationTimeout);
         setIsAddingSite(false);
         return;
-      } else {
+        } else {
         console.log('❌ Aucune IP Shelly trouvée');
         setAlertMsg('❌ Shelly non trouvé sur le réseau. Vérifiez la connexion.');
-        setAlertVisible(true);
+          setAlertVisible(true);
         if (creationTimeout) clearTimeout(creationTimeout);
-        setAddStep(null);
-        setIsAddingSite(false);
+          setAddStep(null);
+          setIsAddingSite(false);
         return;
       }
 
@@ -3318,7 +3315,7 @@ export default function MainPage() {
       setAlertVisible(true);
       
       // Reset des états
-      setPendingWifi(null);
+          setPendingWifi(null);
       setWifiPassword('');
       setPendingDevice(null);
       setShellyIP(null);
@@ -3405,7 +3402,7 @@ export default function MainPage() {
                         name={s.notificationsEnabled ? "bell-ring-outline" : "bell-off-outline"}
                         size={22}
                         color={s.notificationsEnabled ? "#0c7a7e" : "#b0b0b0"}
-                        style={{ marginRight: 6, opacity: s.notificationsEnabled ? 1 : 0.7, transitionProperty: 'color,opacity', transitionDuration: '0.2s' }}
+                        style={{ marginRight: 6, opacity: s.notificationsEnabled ? 1 : 0.7 }}
                       />
                       <Text style={{ fontSize: 14, color: '#222', marginRight: 8 }}>Enable Notifications</Text>
                       <Switch
@@ -3816,7 +3813,7 @@ export default function MainPage() {
                 {isAddingSite ? 'Creating…' : 'Add Site'}
               </Text>
             </TouchableOpacity>
-
+            
             <TouchableOpacity onPress={() => setAddStep(null)} style={{ marginTop: 4 }}>
               <Text style={{ color: '#b35b2a', fontWeight: '700', fontSize: 15, textAlign: 'center' }}>
                 Cancel
@@ -3859,7 +3856,7 @@ export default function MainPage() {
               onSubmitEditing={confirmRename}
               autoFocus
             />
-            <TouchableOpacity
+                <TouchableOpacity
               onPress={confirmRename}
               style={{
                 backgroundColor: renameText.trim() ? '#0c7a7e' : '#ccc',
@@ -3871,7 +3868,7 @@ export default function MainPage() {
               activeOpacity={0.85}
             >
               <Text style={{ color: '#fff', fontWeight: '700' }}>Save</Text>
-            </TouchableOpacity>
+                </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -3960,7 +3957,7 @@ export default function MainPage() {
 
       {/* Device scan modal */}
       <Modal
-        visible={devVisible}
+        visible={false}
         transparent
         animationType="slide"
         onRequestClose={() => {
@@ -4068,12 +4065,7 @@ export default function MainPage() {
         animationType="fade"
         onRequestClose={() => setWifiPasswordModalVisible(false)}
       >
-        <LinearGradient
-          colors={["#f7fafb", "#e6f7f1", "#f7fafb"]}
-          style={StyleSheet.absoluteFill}
-          start={{ x: 0.2, y: 0 }}
-          end={{ x: 0.8, y: 1 }}
-        />
+        <View style={{ flex: 1, backgroundColor: '#f7fafb' }} />
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', minHeight: 400 }}>
           <Animated.View
             style={[
@@ -4152,31 +4144,24 @@ export default function MainPage() {
               <View style={styles.wifiMsgRow}><MaterialCommunityIcons name="close-circle-outline" size={18} color="#d9534f" /><Text style={styles.wifiMsgFail}>Connection failed. Please try again.</Text></View>
             )}
             {/* Bouton Connect pro */}
-            <Pressable
-              style={({ pressed }) => [
+            <TouchableOpacity
+              style={[
                 styles.wifiBtnPro,
-                pressed && { opacity: 0.85, transform: [{ scale: 0.97 }] },
                 wifiPwLoading && { opacity: 0.7 },
               ]}
               onPress={handleWifiConnect}
               disabled={wifiPwLoading}
-              android_ripple={{ color: '#e6f7f1' }}
+              activeOpacity={0.85}
               accessibilityLabel="Connect to Wi-Fi"
             >
-              <LinearGradient
-                colors={["#0c7a7e", "#16989d"]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={StyleSheet.absoluteFill}
-                pointerEvents="none"
-              />
+              <View style={{ flex: 1, backgroundColor: '#0c7a7e', position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, pointerEvents: 'none' }} />
               {wifiPwLoading ? (
                 <ActivityIndicator color="#fff" />
               ) : (
                 <MaterialCommunityIcons name="wifi-arrow-up-down" size={22} color="#fff" style={{ marginRight: 8 }} />
               )}
               <Text style={styles.wifiBtnProTxt}>Connect</Text>
-            </Pressable>
+            </TouchableOpacity>
           </Animated.View>
         </View>
       </Modal>
@@ -4281,7 +4266,7 @@ const Nav = ({
   onPress: () => void;
 }) => (
   <TouchableOpacity style={styles.navBtn} onPress={onPress}>
-    <FontAwesome
+    <MaterialIcons
       name={icon}
       size={20}
       color={active ? "#0c7a7e" : "#6c757d"}
