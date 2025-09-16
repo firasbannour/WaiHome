@@ -1100,24 +1100,41 @@ export default function MainPage() {
         }
         
         // Convertir les données AWS en format SiteInfo
-        const awsSites: SiteInfo[] = devices.map((device: any) => ({
-          id: device.id || `${currentUserId}_shelly-main-device_main-site`,
-          name: device.siteName || 'Unknown Site',
-          icon: 'home-outline' as McIconName,
-          status: device.status === 'Connected' ? 'Connected' : 'Not Connected',
-          solids: (typeof device.solids === 'object' && device.solids !== null)
-            ? (Number(device.solids.total) || 0)
-            : (Number(device.solids) || 0),
-          notificationsEnabled: device.notificationsEnabled || false,
-          deviceInfo: {
-            deviceId: device.deviceId || 'shelly-main-device',
-            macAddress: device.macAddress || 'N/A',
-            ipAddress: device.ipAddress || 'N/A',
-            deviceName: device.deviceName || 'Unknown Device',
-            connectionType: device.connectionType || 'WIFI',
-            lastConnected: device.lastConnected || new Date().toISOString()
-          }
-        }));
+        const awsSites: SiteInfo[] = devices
+          .filter((device: any) => {
+            // FILTRER LES SITES FANTÔMES - ne pas créer de sites avec des données incomplètes
+            const hasValidName = device.siteName && device.siteName.trim() !== '' && device.siteName !== 'Unknown Site';
+            const hasValidDeviceInfo = device.deviceId || device.ipAddress || device.macAddress;
+            
+            if (!hasValidName || !hasValidDeviceInfo) {
+              console.log('🚫 Site fantôme filtré:', {
+                siteName: device.siteName,
+                deviceId: device.deviceId,
+                ipAddress: device.ipAddress,
+                macAddress: device.macAddress
+              });
+              return false;
+            }
+            return true;
+          })
+          .map((device: any) => ({
+            id: device.id || `${currentUserId}_${device.deviceId || 'shelly-device'}`,
+            name: device.siteName || 'Unknown Site',
+            icon: 'home-outline' as McIconName,
+            status: device.status === 'Connected' ? 'Connected' : 'Not Connected',
+            solids: (typeof device.solids === 'object' && device.solids !== null)
+              ? (Number(device.solids.total) || 0)
+              : (Number(device.solids) || 0),
+            notificationsEnabled: device.notificationsEnabled || false,
+            deviceInfo: {
+              deviceId: device.deviceId || 'shelly-main-device',
+              macAddress: device.macAddress || 'N/A',
+              ipAddress: device.ipAddress || 'N/A',
+              deviceName: device.deviceName || 'Unknown Device',
+              connectionType: device.connectionType || 'WIFI',
+              lastConnected: device.lastConnected || new Date().toISOString()
+            }
+          }));
 
         console.log('🔄 Sites convertis depuis AWS:', awsSites);
 
@@ -3004,15 +3021,23 @@ export default function MainPage() {
     if (!name) return;
     if (isAddingSite) return;
     
+    // GESTION D'ERREUR ROBUSTE POUR ÉVITER LES CRASHES
+    let creationTimeout: NodeJS.Timeout | null = null;
+    
     try {
       setIsAddingSite(true);
       setAlertMsg(`🔍 Recherche d'un appareil Shelly...`);
       setAlertVisible(true);
       
       // Safety timeout to avoid being stuck on "Creating..."
-      const creationTimeout = setTimeout(() => {
-        try { setAddStep(null); } catch {}
-        setIsAddingSite(false);
+      creationTimeout = setTimeout(() => {
+        try { 
+          setAddStep(null); 
+          setIsAddingSite(false);
+          setAlertVisible(false);
+        } catch (error) {
+          console.error('❌ Erreur dans timeout:', error);
+        }
       }, 90000); // Augmenté à 90 secondes pour la configuration WiFi Shelly complète
       // Empêcher la création de doublons côté local immédiatement
       const normalized = name.toLowerCase();
@@ -3125,7 +3150,7 @@ export default function MainPage() {
         console.log('❌ BLOCAGE : Configuration WiFi échouée - Site non créé');
         setAlertMsg('❌ Configuration WiFi Shelly échouée. Site non créé. Réessayez.');
         setAlertVisible(true);
-        clearTimeout(creationTimeout);
+        if (creationTimeout) clearTimeout(creationTimeout);
         setAddStep(null);
         setIsAddingSite(false);
         return;
@@ -3433,11 +3458,50 @@ export default function MainPage() {
       console.log('✅ Site ajouté avec succès:', name, 'Status:', connectionStatus);
       
     } catch (error) {
-      console.error('❌ Erreur lors de l\'ajout du site:', error);
-      setAlertMsg('Error adding site');
-      setAlertVisible(true);
+      console.error('❌ ERREUR CRITIQUE lors de l\'ajout du site:', error);
+      
+      // Gestion d'erreur robuste pour éviter les crashes
+      try {
+        if (creationTimeout) clearTimeout(creationTimeout);
+        setAddStep(null);
+        setIsAddingSite(false);
+        
+        // Message d'erreur plus informatif
+        let errorMessage = 'Erreur lors de la création du site';
+        if (error && typeof error === 'object' && 'message' in error) {
+          const errorMsg = (error as any).message;
+          if (errorMsg.includes('Connection timeout')) {
+            errorMessage = 'Timeout de connexion - vérifiez votre réseau';
+          } else if (errorMsg.includes('Network request failed')) {
+            errorMessage = 'Erreur réseau - vérifiez votre connexion';
+          } else if (errorMsg.includes('AWS')) {
+            errorMessage = 'Erreur serveur - réessayez plus tard';
+          }
+        }
+        
+        setAlertMsg(`❌ ${errorMessage}`);
+        setAlertVisible(true);
+        
+        // Reset des états pour éviter les états corrompus
+        setPendingWifi(null);
+        setWifiPassword('');
+        setPendingDevice(null);
+        setShellyIP(null);
+        
+      } catch (cleanupError) {
+        console.error('❌ Erreur lors du nettoyage:', cleanupError);
+        // Force reset minimal
+        setIsAddingSite(false);
+        setAlertVisible(true);
+        setAlertMsg('❌ Erreur critique - redémarrez l\'application');
+      }
     } finally {
-      setIsAddingSite(false);
+      // S'assurer que l'état est toujours réinitialisé
+      try {
+        setIsAddingSite(false);
+      } catch (e) {
+        console.error('❌ Impossible de réinitialiser isAddingSite:', e);
+      }
     }
   };
 
