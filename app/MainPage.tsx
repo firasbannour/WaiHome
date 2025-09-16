@@ -1648,6 +1648,7 @@ export default function MainPage() {
         setShellyIP(null);
         setAlertMsg("⚠️ Configuration finished but Shelly is not connected yet. Make sure it is powered on and on the same network, then try again.");
         setAlertVisible(true);
+        return; // IMPORTANT: Ne pas continuer sans IP Shelly
       }
     } catch (e) {
       setWifiPwLoading(false);
@@ -3097,8 +3098,7 @@ export default function MainPage() {
       
       setInjectionLoading(false);
       
-      // Passer immédiatement à l'étape "nom du site" pour éviter de bloquer le bouton
-      setAddStep('site-name');
+      // SUPPRIMÉ: Ne pas passer à site-name avant vérification Shelly
       setTimeout(async () => {
         try {
           console.log('⏳ Recherche de l\'IP du Shelly en arrière-plan...');
