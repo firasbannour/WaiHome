@@ -3051,18 +3051,18 @@ export default function MainPage() {
     // 🔧 on mémorise simplement pour la suite — PAS de connexion au Wi-Fi maison ici
     setWifiPassword(password);
     setPendingWifi(ssid);
-
+    
     try {
       // Optionnel: vérifier que le Wi-Fi du téléphone est ON (sans tenter de se connecter)
       try {
-        const wifiEnabled = await WifiManager.isEnabled();
-        if (!wifiEnabled) {
-          setInjectionError("Wi-Fi is disabled. Please enable Wi-Fi to continue.");
-          setInjectionLoading(false);
-          return;
-        }
+      const wifiEnabled = await WifiManager.isEnabled();
+      if (!wifiEnabled) {
+        setInjectionError("Wi-Fi is disabled. Please enable Wi-Fi to continue.");
+        setInjectionLoading(false);
+        return;
+      }
       } catch {}
-
+      
       if (pendingDevice) {
         // Mode BLE : on pousse juste les identifiants via BLE (ta logique actuelle / simulée)
         console.log('📡 Envoi des paramètres Wi-Fi via BLE…');
@@ -3070,10 +3070,18 @@ export default function MainPage() {
       } else {
         // Mode Wi-Fi : on se connecte à l'AP Shelly puis on lui envoie ssid/pass
         console.log('📡 Configuration via réseau Shelly (AP)…');
-        await configureShellyWifiViaNetwork(ssid, password);
+        console.log('🔍 SSID à configurer:', ssid);
+        console.log('🔍 Password length:', password.length);
+        
+        const configResult = await configureShellyWifiSimple(ssid, password);
+        console.log('🔍 Résultat configuration:', configResult);
+        
+        if (!configResult) {
+          throw new Error('Configuration WiFi Shelly échouée');
+        }
       }
 
-      setInjectionLoading(false);
+          setInjectionLoading(false);
 
       // Info utilisateur + timers de reboot (identiques à ton code)
       setAlertMsg('⏳ Shelly restarts and connects to your Wi-Fi...');
@@ -3086,13 +3094,21 @@ export default function MainPage() {
       let foundIP: string | null = null;
       for (let attempt = 1; attempt <= 5; attempt++) {
         setAlertMsg(`🔍 Recherche Shelly (${attempt}/5)...`);
+        console.log(`🔍 Tentative ${attempt}/5 - Scan réseau pour Shelly...`);
         foundIP = await scanNetworkForShelly();
-        if (foundIP) break;
-        if (attempt < 5) await new Promise(r => setTimeout(r, 5000));
+        console.log(`🔍 Tentative ${attempt}/5 - Résultat:`, foundIP);
+        if (foundIP) {
+          console.log('🎉 Shelly trouvé à l\'IP:', foundIP);
+          break;
+        }
+        if (attempt < 5) {
+          console.log(`⏳ Attente 5s avant tentative ${attempt + 1}...`);
+          await new Promise(r => setTimeout(r, 5000));
+        }
       }
 
       if (!foundIP) {
-        setAlertMsg('❌ Unable to find Shelly. No site was created.');
+        setAlertMsg('❌ Unable to find Shelly after WiFi configuration. Possible issues:\n\n• Check WiFi password\n• Try simpler SSID/password\n• Ensure Shelly is powered on\n• Try again in 2 minutes');
         setAlertVisible(true);
         return;
       }
