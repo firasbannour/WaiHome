@@ -3032,7 +3032,7 @@ export default function MainPage() {
     }
   };
 
-  // Handler pour injection Wi-Fi (étape 1)
+  // Handler pour injection Wi-Fi (étape 1) — VERSION SIMPLE (une seule demande Android)
   const handleInjectWifi = async () => {
     setInjectionError("");
     const ssid = injectionSsid.trim();
@@ -3045,120 +3045,44 @@ export default function MainPage() {
       setInjectionError("Password must be at least 8 characters.");
       return;
     }
+
     setInjectionLoading(true);
-    
-    // 🔧 Synchroniser injectionPassword → wifiPassword et selectedSsid → pendingWifi
+
+    // 🔧 on mémorise simplement pour la suite — PAS de connexion au Wi-Fi maison ici
     setWifiPassword(password);
     setPendingWifi(ssid);
-    
+
     try {
-      // Vérifier que le Wi-Fi est activé
-      const wifiEnabled = await WifiManager.isEnabled();
-      if (!wifiEnabled) {
-        setInjectionError("Wi-Fi is disabled. Please enable Wi-Fi to continue.");
-        setInjectionLoading(false);
-        return;
-      }
-      
-      // Récupérer le SSID actuel du téléphone
-      const currentSsid = await WifiManager.getCurrentWifiSSID();
-      console.log('📱 Téléphone connecté à:', currentSsid);
-      
-      // VÉRIFICATION DU MOT DE PASSE WI-FI
-      console.log('🔐 Vérification du mot de passe Wi-Fi pour:', ssid);
-      
+      // Optionnel: vérifier que le Wi-Fi du téléphone est ON (sans tenter de se connecter)
       try {
-        // Tenter de se connecter au Wi-Fi pour vérifier le mot de passe
-        await WifiManager.connectToProtectedSSID(ssid, password, false, false);
-        console.log('✅ Mot de passe Wi-Fi correct !');
-        
-        // Vérifier que le Wi-Fi est toujours activé après la connexion
-        const wifiStillEnabled = await WifiManager.isEnabled();
-        if (!wifiStillEnabled) {
-          console.log('⚠️ Wi-Fi désactivé après connexion, réactivation...');
-          await WifiManager.setEnabled(true);
-          await new Promise(resolve => setTimeout(resolve, 2000));
+        const wifiEnabled = await WifiManager.isEnabled();
+        if (!wifiEnabled) {
+          setInjectionError("Wi-Fi is disabled. Please enable Wi-Fi to continue.");
+          setInjectionLoading(false);
+          return;
         }
-        
-        // Revenir au réseau original si différent
-        if (currentSsid && currentSsid !== ssid) {
-          console.log('🔄 Retour au réseau original:', currentSsid);
-          // Note: Ici vous devriez reconnecter au réseau original
-          // await WifiManager.connectToProtectedSSID(currentSsid, originalPassword, false, false);
-        }
-        
-      } catch (wifiError) {
-        console.error('❌ Mot de passe Wi-Fi incorrect:', wifiError);
-        // Réactiver le Wi-Fi en cas d'erreur
-        try {
-          const wifiEnabled = await WifiManager.isEnabled();
-          if (!wifiEnabled) {
-            console.log('🔄 Réactivation du Wi-Fi après erreur de mot de passe...');
-            await WifiManager.setEnabled(true);
-            await new Promise(resolve => setTimeout(resolve, 2000));
-          }
-        } catch (wifiError2) {
-          console.log('⚠️ Impossible de réactiver le Wi-Fi:', wifiError2);
-        }
-        setInjectionError("Incorrect Wi-Fi password. Please check your password.");
-        setInjectionLoading(false);
-        return;
-      }
-      
+      } catch {}
+
       if (pendingDevice) {
-        // Mode BLE : Envoyer les paramètres Wi-Fi via Bluetooth
-        console.log('📡 Envoi des paramètres Wi-Fi via BLE à l\'appareil Shelly:', { ssid, password });
-        
-        // Utiliser la vraie communication BLE avec Shelly (simulation pour l'instant)
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        
-        console.log('✅ Paramètres Wi-Fi envoyés via BLE');
-        
+        // Mode BLE : on pousse juste les identifiants via BLE (ta logique actuelle / simulée)
+        console.log('📡 Envoi des paramètres Wi-Fi via BLE…');
+        await new Promise(res => setTimeout(res, 2000));
       } else {
-        // Mode Wi-Fi : Configuration via le réseau Shelly
-        console.log('📡 Configuration via réseau Shelly');
-        
-        try {
-          // Configuration réelle via le réseau Shelly
-          await configureShellyWifiViaNetwork(ssid, password);
-          console.log('✅ Configuration Wi-Fi via réseau Shelly terminée');
-        } catch (wifiError) {
-          console.error('❌ Erreur configuration Wi-Fi via réseau:', wifiError);
-          
-          // Ne plus bloquer sur les erreurs de réseau Shelly - continuer quand même
-          console.log('⚠️ Erreur configuration Wi-Fi, mais on continue quand même');
-          
-          // Messages d'erreur plus spécifiques (mais ne plus bloquer)
-          let specificError = "Wi-Fi configuration completed with warnings. Please check device connection.";
-          
-          if (wifiError.message && wifiError.message.includes('Aucun réseau Shelly trouvé')) {
-            specificError = "No Shelly network found, but continuing with direct configuration.";
-          } else if (wifiError.message && wifiError.message.includes('Impossible de se connecter au réseau Shelly')) {
-            specificError = "Cannot connect to Shelly network, but continuing with direct configuration.";
-          } else if (wifiError.message && wifiError.message.includes('Impossible de trouver l\'IP du Shelly')) {
-            specificError = "Cannot find Shelly IP, but continuing with direct configuration.";
-          } else if (wifiError.message && wifiError.message.includes('Erreur HTTP')) {
-            specificError = "HTTP error during configuration, but continuing.";
-          }
-          
-          console.log('ℹ️ Message d\'information:', specificError);
-          // Ne plus afficher l'erreur comme bloquante
-        }
+        // Mode Wi-Fi : on se connecte à l'AP Shelly puis on lui envoie ssid/pass
+        console.log('📡 Configuration via réseau Shelly (AP)…');
+        await configureShellyWifiViaNetwork(ssid, password);
       }
-      
+
       setInjectionLoading(false);
-      
-      // 🔒 Ne PAS aller à 'site-name' tant que le Shelly n'est pas joignable
+
+      // Info utilisateur + timers de reboot (identiques à ton code)
       setAlertMsg('⏳ Shelly restarts and connects to your Wi-Fi...');
       setAlertVisible(true);
 
-      // attendre ~30 s le reboot
-      await new Promise(res => setTimeout(res, 30000));
+      await new Promise(res => setTimeout(res, 30000)); // reboot
+      await new Promise(res => setTimeout(res, 10000)); // stabilisation
 
-      // (optionnel) petite pause pour stabiliser la connexion
-      await new Promise(res => setTimeout(res, 10000));
-
-      // tenter 5 fois de trouver l'IP
+      // Recherche IP Shelly (max 5 tentatives)
       let foundIP: string | null = null;
       for (let attempt = 1; attempt <= 5; attempt++) {
         setAlertMsg(`🔍 Recherche Shelly (${attempt}/5)...`);
@@ -3170,27 +3094,19 @@ export default function MainPage() {
       if (!foundIP) {
         setAlertMsg('❌ Unable to find Shelly. No site was created.');
         setAlertVisible(true);
-        return; // 🔒 STOP : on NE va PAS à 'site-name'
+        return;
       }
 
       setShellyIP(foundIP);
       setAlertVisible(false);
-      setAddStep('site-name'); // ✅ on n'ouvre le nom de site que maintenant
-      
-    } catch (error) {
-      console.error('❌ Erreur lors de la configuration Wi-Fi:', error);
-      
-      let errorMessage = "Error configuring Wi-Fi. Please try again.";
-      
-      if (error.message && error.message.includes('AUTHENTICATION_FAILED')) {
-        errorMessage = "Incorrect Wi-Fi password. Please check your password.";
-      } else if (error.message && error.message.includes('NETWORK_NOT_FOUND')) {
-        errorMessage = "Wi-Fi network not found. Check the network name.";
-      } else if (error.message && error.message.includes('TIMEOUT')) {
-        errorMessage = "Timeout exceeded. Please try again.";
-      }
-      
-      setInjectionError(errorMessage);
+      setAddStep('site-name'); // ➜ on passe à la saisie du nom
+    } catch (error:any) {
+      console.error('❌ Erreur configuration Wi-Fi:', error);
+      let msg = "Error configuring Wi-Fi. Please try again.";
+      if (error?.message?.includes('AUTHENTICATION_FAILED')) msg = "Incorrect Wi-Fi password. Please check your password.";
+      if (error?.message?.includes('NETWORK_NOT_FOUND')) msg = "Wi-Fi network not found. Check the network name.";
+      if (error?.message?.includes('TIMEOUT')) msg = "Timeout exceeded. Please try again.";
+      setInjectionError(msg);
       setInjectionLoading(false);
     }
   };
