@@ -29,7 +29,12 @@
         "android.permission.CHANGE_WIFI_STATE",
         "android.permission.ACCESS_NETWORK_STATE",
         "android.permission.INTERNET",
-        "android.permission.NEARBY_WIFI_DEVICES"
+        "android.permission.NEARBY_WIFI_DEVICES",
+        "android.permission.CHANGE_NETWORK_STATE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WAKE_LOCK",
+        "android.permission.FOREGROUND_SERVICE"
       ]
     },
     "web": {
@@ -55,7 +60,8 @@
           "isWifiNetworkSpecifierEnabled": true
         }
       ],
-      "react-native-ble-plx"
+      "react-native-ble-plx",
+      "./plugins/withNetworkSecurity"
     ],
     "experiments": {
       "typedRoutes": true

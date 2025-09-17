@@ -58,7 +58,7 @@ interface SiteInfo {
 
 
 // Helper pour fetch avec timeout (remplace AbortSignal.timeout qui ne marche pas en RN)
-async function fetchWithTimeout(url: string, opts: RequestInit = {}, ms = 3000) {
+async function fetchWithTimeout(url: string, opts: RequestInit = {}, ms = 10000) {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), ms);
   try { 
@@ -82,7 +82,7 @@ async function finalizeSiteCreation(params: {
     console.log('🔒 VÉRIFICATION CRITIQUE : Test de connexion réelle au Shelly...');
     
     // 1. Test de connexion HTTP au Shelly
-    const shellyResponse = await fetchWithTimeout(`http://${shellyIp}/shelly`, {}, 5000);
+    const shellyResponse = await fetchWithTimeout(`http://${shellyIp}/shelly`, {}, 15000);
     if (!shellyResponse.ok) {
       throw new Error(`Shelly non accessible sur ${shellyIp}`);
     }
@@ -95,7 +95,7 @@ async function finalizeSiteCreation(params: {
     const macAddress = shellyData.mac || shellyData.device?.mac || 'unknown';
     
     // 3. Test de connexion simple
-    const connectionTest = await fetchWithTimeout(`http://${shellyIp}/status`, {}, 5000);
+    const connectionTest = await fetchWithTimeout(`http://${shellyIp}/status`, {}, 15000);
     if (!connectionTest.ok) {
       throw new Error('Shelly connection test failed');
     }
@@ -242,7 +242,7 @@ export default function MainPage() {
 
       const fetchStatus = async (id: number) => {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 3500);
+        const timeoutId = setTimeout(() => controller.abort(), 8000);
         try {
           // Essayer d'abord l'API RPC standard
           let res = await fetch(`http://${targetIp}/rpc/Switch.GetStatus?id=${id}`, { method: 'GET', signal: controller.signal });
@@ -891,7 +891,7 @@ export default function MainPage() {
           try {
             // Essayer de pinger Shelly sur son IP avec timeout plus court
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 1000); // Timeout réduit à 1 seconde pour détection encore plus rapide
+            const timeoutId = setTimeout(() => controller.abort(), 5000); // Timeout augmenté pour APK
             
             // Essayer plusieurs endpoints Shelly dans l'ordre de priorité
             const endpoints = [
@@ -1622,8 +1622,8 @@ export default function MainPage() {
               setWifiPasswordModalVisible(false);
               // ✅ CORRECTION : Passer à site-name SEULEMENT si IP trouvée
               // La vérification critique se fera dans handleAddSiteName
-              setAddStep('site-name');
-              setNewSiteName("");
+        setAddStep('site-name');
+        setNewSiteName("");
               return;
             }
             if (attempt < 5) await new Promise(resolve => setTimeout(resolve, 5000));
@@ -3247,7 +3247,7 @@ export default function MainPage() {
         if (finalizeResult.success) {
           console.log('✅ VERROU CRITIQUE RÉUSSI : Site créé avec succès');
           setAlertMsg('✅ Site created successfully!');
-          setAlertVisible(true);
+              setAlertVisible(true);
           
           // Ajouter le site localement avec persistance immédiate
           await persistSites([...sites, finalizeResult.site!]);
@@ -3274,10 +3274,10 @@ export default function MainPage() {
         if (creationTimeout) clearTimeout(creationTimeout);
         setIsAddingSite(false);
         return;
-        } else {
+      } else {
         console.log('❌ Aucune IP Shelly trouvée');
         setAlertMsg('❌ Shelly not found on network. Check connection.');
-          setAlertVisible(true);
+        setAlertVisible(true);
         if (creationTimeout) clearTimeout(creationTimeout);
           setAddStep(null);
           setIsAddingSite(false);
@@ -3290,8 +3290,8 @@ export default function MainPage() {
       
       // Gestion d'erreur simplifiée
       if (creationTimeout) clearTimeout(creationTimeout);
-      setAddStep(null);
-      setIsAddingSite(false);
+          setAddStep(null);
+          setIsAddingSite(false);
       
       let errorMessage = 'Error creating site';
       if (error && typeof error === 'object' && 'message' in error) {
