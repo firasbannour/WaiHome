@@ -97,7 +97,7 @@ async function finalizeSiteCreation(params: {
     // 3. Test de connexion simple
     const connectionTest = await fetchWithTimeout(`http://${shellyIp}/status`, {}, 5000);
     if (!connectionTest.ok) {
-      throw new Error('Test de connexion Shelly échoué');
+      throw new Error('Shelly connection test failed');
     }
     
     console.log('✅ VÉRIFICATION CRITIQUE RÉUSSIE : Shelly opérationnel');
@@ -146,7 +146,7 @@ async function finalizeSiteCreation(params: {
     console.error('❌ VÉRIFICATION CRITIQUE ÉCHOUÉE:', error);
     return { 
       success: false, 
-      error: (error as Error).message || 'Impossible de vérifier la connexion Shelly'
+      error: (error as Error).message || 'Unable to verify Shelly connection'
     };
   }
 }
@@ -744,7 +744,7 @@ export default function MainPage() {
               const lastUpdate = existingDevice.lastUpdated ? 
                 new Date(existingDevice.lastUpdated).toLocaleString() : 'Unknown';
               
-              setAlertMsg(`✅ Shelly "${siteName}" redémarré et reconnecté automatiquement !\n\nDernière mise à jour: ${lastUpdate}\nIP: ${shellyIP}\n\nTous les composants ont été restaurés.`);
+              setAlertMsg(`✅ Shelly "${siteName}" restarted and reconnected automatically!\n\nLast update: ${lastUpdate}\nIP: ${shellyIP}\n\nAll components have been restored.`);
               setAlertVisible(true);
               
               return true;
@@ -1074,7 +1074,7 @@ export default function MainPage() {
       // Scanner le réseau pour trouver un Shelly
       const shellyIP = await scanNetworkForShelly();
       if (!shellyIP) {
-        setAlertMsg('Aucun Shelly détecté sur le réseau. Vérifiez la connexion.');
+        setAlertMsg('No Shelly detected on the network. Check connection.');
         setAlertVisible(true);
         return;
       }
@@ -1084,7 +1084,7 @@ export default function MainPage() {
       // Configurer le comportement après coupure
       await configureShellyPowerOnBehavior(shellyIP);
       
-      setAlertMsg('✅ Shelly configuré avec succès ! Tous les relais se remettront en OFF après coupure de courant.');
+      setAlertMsg('✅ Shelly configured successfully! All relays will turn OFF after power outage.');
       setAlertVisible(true);
       
     } catch (error) {
@@ -1602,7 +1602,7 @@ export default function MainPage() {
         const wifiConfigSuccess = await configureShellyWifiSimple(selectedSsid, wifiPassword);
         if (wifiConfigSuccess) {
           console.log('✅ Configuration WiFi réussie !');
-          setAlertMsg('✅ Configuration WiFi réussie ! Shelly va redémarrer...');
+          setAlertMsg('✅ WiFi configuration successful! Shelly will restart...');
           
           // Attendre le redémarrage
           await new Promise(resolve => setTimeout(resolve, 30000));
@@ -1617,22 +1617,25 @@ export default function MainPage() {
             const newIP = await scanNetworkForShelly();
             if (newIP) {
               console.log('🎉 Shelly trouvé après redémarrage à l\'IP:', newIP);
-              setAlertMsg('🎉 Shelly connecté au WiFi !');
+              setAlertMsg('🎉 Shelly connected to WiFi!');
               setShellyIP(newIP);
-        setAddStep('site-name');
-        setNewSiteName("");
+              setWifiPasswordModalVisible(false);
+              // ✅ CORRECTION : Passer à site-name SEULEMENT si IP trouvée
+              // La vérification critique se fera dans handleAddSiteName
+              setAddStep('site-name');
+              setNewSiteName("");
               return;
             }
             if (attempt < 5) await new Promise(resolve => setTimeout(resolve, 5000));
           }
           
           // Si pas trouvé après 5 tentatives - NE PAS passer à site-name
-          setAlertMsg('⚠️ Shelly pas encore visible - vérifiez la connexion et réessayez');
+          setAlertMsg('⚠️ Shelly not yet visible - check connection and try again');
           setAlertVisible(true);
           // IMPORTANT: Ne pas passer à site-name sans IP Shelly
         } else {
           console.log('❌ Configuration WiFi échouée');
-          setAlertMsg('❌ Configuration WiFi Shelly échouée. Site non créé. Réessayez.');
+          setAlertMsg('❌ Shelly WiFi configuration failed. Site not created. Please try again.');
           setAlertVisible(true);
           // NE PAS passer à site-name si échec
           return;
@@ -1959,7 +1962,7 @@ export default function MainPage() {
         console.log('✅ Commande envoyée avec succès:', result);
         
         // Afficher un message de confirmation
-        setAlertMsg(`✅ Commande ${action} envoyée au composant ${component} sur ${siteId}`);
+        setAlertMsg(`✅ Command ${action} sent to component ${component} on ${siteId}`);
         setAlertVisible(true);
         
         // Mettre à jour l'interface si nécessaire
@@ -1991,9 +1994,9 @@ export default function MainPage() {
       console.log('📡 Statut MQTT:', status);
       
       if (status.connected) {
-        setAlertMsg(`✅ MQTT connecté à ${status.endpoint}`);
+        setAlertMsg(`✅ MQTT connected to ${status.endpoint}`);
       } else {
-        setAlertMsg(`⚠️ MQTT déconnecté - ${status.endpoint}`);
+        setAlertMsg(`⚠️ MQTT disconnected - ${status.endpoint}`);
       }
       setAlertVisible(true);
       
@@ -2024,7 +2027,7 @@ export default function MainPage() {
       // Test 4: Désactiver le chauffage
       await sendRemoteCommand(siteId, 'heater', 'off');
       
-      setAlertMsg('✅ Tests des commandes à distance terminés !');
+      setAlertMsg('✅ Remote command tests completed!');
       setAlertVisible(true);
       
     } catch (error) {
@@ -2101,7 +2104,7 @@ export default function MainPage() {
       // Trouver l'IP du Shelly sur le réseau principal
       const shellyIP = await scanNetworkForShelly();
       if (!shellyIP) {
-        throw new Error('Shelly non trouvé sur le réseau principal');
+        throw new Error('Shelly not found on main network');
       }
       
       console.log('📡 Configuration Wi-Fi via Shelly sur:', shellyIP);
@@ -2124,7 +2127,7 @@ export default function MainPage() {
         console.log('✅ Configuration Wi-Fi directe réussie');
         return true;
       } else {
-        throw new Error('Échec de la configuration Wi-Fi directe');
+        throw new Error('Direct Wi-Fi configuration failed');
       }
       
     } catch (error) {
@@ -2156,7 +2159,7 @@ export default function MainPage() {
         console.log('✅ Configuration Wi-Fi via IP réussie');
         return true;
       } else {
-        throw new Error('Échec de la configuration Wi-Fi via IP');
+        throw new Error('Wi-Fi configuration via IP failed');
       }
       
     } catch (error) {
@@ -2792,7 +2795,7 @@ export default function MainPage() {
         } catch (wifiError) {
           console.log('⚠️ Impossible de réactiver le Wi-Fi:', wifiError);
         }
-        throw new Error(`Impossible de se connecter au réseau Shelly: ${connectError.message}`);
+        throw new Error(`Unable to connect to Shelly network: ${connectError.message}`);
       }
       
       // Attendre la connexion
@@ -2827,7 +2830,7 @@ export default function MainPage() {
       
       if (!reachable) {
         console.log('❌ IP AP par défaut non joignable');
-        throw new Error('Impossible de joindre le Shelly sur 192.168.33.1. Assurez-vous d\'être connecté au Wi‑Fi Shelly.');
+        throw new Error('Unable to reach Shelly on 192.168.33.1. Make sure you are connected to Shelly Wi-Fi.');
       }
       
       console.log('✅ Shelly AP joignable sur IP:', shellyIP);
@@ -2928,7 +2931,7 @@ export default function MainPage() {
       }
       
       if (!configSuccess) {
-        throw new Error('Aucune méthode de configuration n\'a fonctionné');
+        throw new Error('No configuration method worked');
       }
       
       // 6. Redémarrer le Shelly pour appliquer la configuration
@@ -3097,7 +3100,7 @@ export default function MainPage() {
         } catch (wifiError2) {
           console.log('⚠️ Impossible de réactiver le Wi-Fi:', wifiError2);
         }
-        setInjectionError("Mot de passe Wi-Fi incorrect. Veuillez vérifier votre mot de passe.");
+        setInjectionError("Incorrect Wi-Fi password. Please check your password.");
         setInjectionLoading(false);
         return;
       }
@@ -3146,7 +3149,7 @@ export default function MainPage() {
       setInjectionLoading(false);
       
       // 🔒 Ne PAS aller à 'site-name' tant que le Shelly n'est pas joignable
-      setAlertMsg('⏳ Shelly redémarre et se connecte à ton Wi-Fi...');
+      setAlertMsg('⏳ Shelly restarts and connects to your Wi-Fi...');
       setAlertVisible(true);
 
       // attendre ~30 s le reboot
@@ -3165,16 +3168,14 @@ export default function MainPage() {
       }
 
       if (!foundIP) {
-        setAlertMsg('❌ Impossible de trouver le Shelly. Aucun site n\'a été créé.');
+        setAlertMsg('❌ Unable to find Shelly. No site was created.');
         setAlertVisible(true);
-        setInjectionLoading(false); // ✅ Arrêter le loading
         return; // 🔒 STOP : on NE va PAS à 'site-name'
       }
 
       setShellyIP(foundIP);
       setAlertVisible(false);
       setAddStep('site-name'); // ✅ on n'ouvre le nom de site que maintenant
-      setInjectionLoading(false); // ✅ Arrêter le loading
       
     } catch (error) {
       console.error('❌ Erreur lors de la configuration Wi-Fi:', error);
@@ -3228,73 +3229,14 @@ export default function MainPage() {
       }
       const currentUserId = userIdResult.data || userIdResult.userId || userIdResult;
 
-      // NOUVELLE LOGIQUE SIMPLIFIÉE AVEC VERROU CRITIQUE
-      console.log('🔍 Configuration WiFi du Shelly...');
-      console.log('🔍 pendingWifi:', pendingWifi);
-      console.log('🔍 wifiPassword:', wifiPassword ? '***' : 'NULL');
-      setAlertMsg(`🔧 Configuration du WiFi Shelly...`);
+      // 🔒 VERROU CRITIQUE : Vérifier que le Shelly est accessible
+      console.log('🔒 VÉRIFICATION CRITIQUE : Test de connexion réelle au Shelly...');
+      setAlertMsg(`🔒 Verifying Shelly connection...`);
       
-      let foundShellyIP: string | null = null;
-      let wifiConfigurationSuccess = false;
+      // Utiliser l'IP Shelly trouvée précédemment (dans handleWifiConnect ou handleInjectWifi)
+      const foundShellyIP = shellyIP;
       
-      // ÉTAPE 1: Configuration WiFi du Shelly (si nécessaire)
-      if (pendingWifi && wifiPassword) {
-        console.log('🚀 Configuration WiFi du Shelly...');
-        setAlertMsg(`🔧 Configuration WiFi Shelly...`);
-        
-        const wifiConfigSuccess = await configureShellyWifiSimple(pendingWifi, wifiPassword);
-        if (wifiConfigSuccess) {
-          console.log('✅ Configuration WiFi réussie !');
-          wifiConfigurationSuccess = true;
-          setAlertMsg(`✅ Configuration WiFi réussie ! Shelly va redémarrer...`);
-          
-          // Attendre le redémarrage
-          await new Promise(resolve => setTimeout(resolve, 30000));
-          
-          // Retour au WiFi principal
-          await reconnectToMainWifi(pendingWifi, wifiPassword);
-          await new Promise(resolve => setTimeout(resolve, 10000));
-          
-          // Chercher le Shelly sur le réseau
-          for (let attempt = 1; attempt <= 5; attempt++) {
-            setAlertMsg(`🔍 Recherche Shelly (${attempt}/5)...`);
-            foundShellyIP = await scanNetworkForShelly();
-            if (foundShellyIP) {
-              console.log('🎉 Shelly trouvé à l\'IP:', foundShellyIP);
-              setAlertMsg(`🎉 Shelly connecté au WiFi !`);
-              break;
-            }
-            if (attempt < 5) await new Promise(resolve => setTimeout(resolve, 5000));
-          }
-        } else {
-          console.log('❌ Configuration WiFi échouée');
-          wifiConfigurationSuccess = false;
-        }
-        } else {
-        // Pas de WiFi configuré, scan direct
-        wifiConfigurationSuccess = true;
-        foundShellyIP = await scanNetworkForShelly();
-        if (foundShellyIP) {
-          console.log('✅ Shelly trouvé directement à l\'IP:', foundShellyIP);
-        }
-      }
-
-      // VÉRIFICATION CRITIQUE : Ne pas créer le site si la configuration WiFi a échoué
-      if (pendingWifi && wifiPassword && !wifiConfigurationSuccess) {
-        console.log('❌ BLOCAGE : Configuration WiFi échouée - Site non créé');
-        setAlertMsg('❌ Configuration WiFi Shelly échouée. Site non créé. Réessayez.');
-        setAlertVisible(true);
-        if (creationTimeout) clearTimeout(creationTimeout);
-        setAddStep(null);
-        setIsAddingSite(false);
-        return;
-      }
-
-      // ÉTAPE 2: VERROU CRITIQUE - Utiliser finalizeSiteCreation
       if (foundShellyIP) {
-        console.log('🔒 VERROU CRITIQUE : Test de connexion réelle au Shelly...');
-        setAlertMsg(`🔒 Vérification de la connexion Shelly...`);
-        
         const finalizeResult = await finalizeSiteCreation({
           shellyIp: foundShellyIP!,
           ssid: selectedSsid || pendingWifi || 'direct',
@@ -3304,7 +3246,7 @@ export default function MainPage() {
         
         if (finalizeResult.success) {
           console.log('✅ VERROU CRITIQUE RÉUSSI : Site créé avec succès');
-          setAlertMsg('✅ Site créé avec succès !');
+          setAlertMsg('✅ Site created successfully!');
           setAlertVisible(true);
           
           // Ajouter le site localement avec persistance immédiate
@@ -3334,7 +3276,7 @@ export default function MainPage() {
         return;
         } else {
         console.log('❌ Aucune IP Shelly trouvée');
-        setAlertMsg('❌ Shelly non trouvé sur le réseau. Vérifiez la connexion.');
+        setAlertMsg('❌ Shelly not found on network. Check connection.');
           setAlertVisible(true);
         if (creationTimeout) clearTimeout(creationTimeout);
           setAddStep(null);
@@ -3351,15 +3293,15 @@ export default function MainPage() {
       setAddStep(null);
       setIsAddingSite(false);
       
-      let errorMessage = 'Erreur lors de la création du site';
+      let errorMessage = 'Error creating site';
       if (error && typeof error === 'object' && 'message' in error) {
         const errorMsg = (error as any).message;
         if (errorMsg.includes('Connection timeout')) {
-          errorMessage = 'Timeout de connexion - vérifiez votre réseau';
+          errorMessage = 'Connection timeout - check your network';
         } else if (errorMsg.includes('Network request failed')) {
-          errorMessage = 'Erreur réseau - vérifiez votre connexion';
+          errorMessage = 'Network error - check your connection';
         } else if (errorMsg.includes('AWS')) {
-          errorMessage = 'Erreur serveur - réessayez plus tard';
+          errorMessage = 'Server error - try again later';
         }
       }
       

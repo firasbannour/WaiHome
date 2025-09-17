@@ -66,7 +66,7 @@ export default function LoginScreen() {
           console.log('❌ Login failed:', result.error);
         
         // Handle specific errors
-        if (result.error && result.error.includes('Session bloquée')) {
+        if (result.error && result.error.includes('Session blocked')) {
           Alert.alert(
             'Session Blocked',
             "Please completely restart the application and try again.",
@@ -81,7 +81,7 @@ export default function LoginScreen() {
               }
             ]
           );
-        } else if (result.error && result.error.includes('n\'est pas encore confirmé')) {
+        } else if (result.error && result.error.includes('not yet confirmed')) {
           Alert.alert(
             'Account Not Confirmed',
             "Your account is not yet confirmed. Please check your email and enter the confirmation code.",

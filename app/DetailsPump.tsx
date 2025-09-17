@@ -76,13 +76,13 @@ export default function DetailsPump() {
             onPumpChange(newPumpState);
           }
           
-          console.log('✅ État pump synchronisé avec succès:', result);
+          console.log('✅ Pump state synchronized successfully:', result);
         } else {
-          console.error('❌ Échec synchronisation pump:', result.error);
+          console.error('❌ Pump synchronization failed:', result.error);
           // Optionnel: afficher une alerte d'erreur à l'utilisateur
         }
       } catch (error) {
-        console.error('❌ Erreur mise à jour état pump:', error);
+        console.error('❌ Error updating pump state:', error);
       } finally {
         setIsLoading(false);
       }

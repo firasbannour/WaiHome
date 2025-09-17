@@ -81,7 +81,7 @@ export default function DetailsHeater() {
                 lastUpdated: new Date().toISOString(),
                 updatedAt: new Date().toISOString(),
               };
-              console.log('📤 Mise à jour AWS via PUT avec ID:', currentSite.id, 'payload:', updates);
+              console.log('📤 AWS update via PUT with ID:', currentSite.id, 'payload:', updates);
               const result = await ShellyService.updateShellyDevice(currentSite.id, updates);
               
               if (result.success) {
