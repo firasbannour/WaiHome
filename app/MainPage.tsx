@@ -2312,17 +2312,33 @@ export default function MainPage() {
       
       console.log('✅ Réseau Shelly trouvé:', shellyNetwork.SSID);
       
-      // ÉTAPE 2: Se connecter au réseau Shelly AP
+      // ÉTAPE 2: Se connecter au réseau Shelly AP (réseau ouvert)
       console.log('🔌 ÉTAPE 2: Connexion au réseau Shelly AP...');
-      const connectResult = await WifiManager.connectToProtectedSSID(
-        shellyNetwork.SSID, 
-        '', // Pas de mot de passe pour l'AP Shelly
-        false
-      );
+      let connectResult = false as boolean;
+      try {
+        // 2.a Essayer l'API dédiée aux réseaux ouverts
+        // Sur certaines versions d'Android, l'appel suivant fonctionne mieux pour un AP sans mot de passe
+        // et évite le dialogue système qui peut annuler la demande.
+        // Si indisponible, on bascule sur connectToProtectedSSID avec mot de passe vide.
+        // @ts-ignore: connectToSSID existe sur Android via react-native-wifi-reborn
+        connectResult = await WifiManager.connectToSSID(shellyNetwork.SSID);
+        console.log('✅ Connexion Shelly AP via connectToSSID:', connectResult);
+      } catch (e) {
+        console.log('ℹ️ connectToSSID non disponible ou échouée, fallback protectedSSID:', e);
+      }
       
       if (!connectResult) {
-        console.log('❌ Échec connexion au réseau Shelly AP');
-        return false;
+        try {
+          connectResult = await WifiManager.connectToProtectedSSID(
+            shellyNetwork.SSID,
+            '', // AP Shelly sans mot de passe
+            false
+          );
+          console.log('✅ Connexion Shelly AP via connectToProtectedSSID:', connectResult);
+        } catch (e2) {
+          console.log('❌ Échec connexion au réseau Shelly AP:', e2);
+          return false;
+        }
       }
       
       console.log('✅ Connecté au réseau Shelly AP');
@@ -2331,15 +2347,40 @@ export default function MainPage() {
       console.log('⏳ ÉTAPE 3: Attente de la connexion stable...');
       await new Promise(resolve => setTimeout(resolve, 8000));
       
-      // ÉTAPE 4: Configuration WiFi du Shelly
+      // ÉTAPE 4: Configuration WiFi du Shelly (support Gen 2 + Gen 1)
       console.log('🔧 ÉTAPE 4: Configuration WiFi du Shelly...');
       const shellyIP = '192.168.33.1';
       
       // Essayer plusieurs méthodes de configuration
       let configSuccess = false;
+      let usedRpc = false;
+
+      // Méthode 0: RPC Gen2 (Shelly Pro/Plus) - prioritaire
+      try {
+        console.log('🔧 Méthode 0: RPC Gen2 WiFi.SetConfig...');
+        const rpcResponse = await fetch(`http://${shellyIP}/rpc/WiFi.SetConfig`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            config: {
+              sta: { ssid, pass: password, enable: true },
+              ap: { enable: false }
+            }
+          })
+        });
+        if (rpcResponse.ok) {
+          console.log('✅ Configuration WiFi via RPC réussie');
+          configSuccess = true;
+          usedRpc = true;
+        } else {
+          console.log('⚠️ RPC WiFi.SetConfig a renvoyé', rpcResponse.status);
+        }
+      } catch (rpcError) {
+        console.log('⚠️ Erreur RPC WiFi.SetConfig:', rpcError);
+      }
       
       // Méthode 1: API GET simple
-      try {
+      if (!configSuccess) try {
         console.log('🔧 Méthode 1: API GET simple...');
         const response = await fetch(`http://${shellyIP}/settings/wifi?ssid=${encodeURIComponent(ssid)}&pass=${encodeURIComponent(password)}`, {
           method: 'GET'
@@ -2407,6 +2448,15 @@ export default function MainPage() {
       
       if (configSuccess) {
         console.log('🎉 CONFIGURATION WIFI RÉUSSIE !');
+        // Pour les appareils Gen2 configurés via RPC, lancer un reboot explicite
+        if (usedRpc) {
+          try {
+            await fetch(`http://${shellyIP}/rpc/Device.Reboot`, { method: 'POST' });
+            console.log('🔄 Reboot demandé via RPC');
+          } catch (e) {
+            console.log('⚠️ Reboot RPC échoué (peut être normal si l\'appareil redémarre déjà):', e);
+          }
+        }
         console.log('⏳ Le Shelly va redémarrer et se connecter à ton WiFi...');
         return true;
       } else {
@@ -3117,12 +3167,14 @@ export default function MainPage() {
       if (!foundIP) {
         setAlertMsg('❌ Impossible de trouver le Shelly. Aucun site n\'a été créé.');
         setAlertVisible(true);
+        setInjectionLoading(false); // ✅ Arrêter le loading
         return; // 🔒 STOP : on NE va PAS à 'site-name'
       }
 
       setShellyIP(foundIP);
       setAlertVisible(false);
       setAddStep('site-name'); // ✅ on n'ouvre le nom de site que maintenant
+      setInjectionLoading(false); // ✅ Arrêter le loading
       
     } catch (error) {
       console.error('❌ Erreur lors de la configuration Wi-Fi:', error);
